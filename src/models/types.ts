@@ -22,7 +22,7 @@ export interface Pin {
   y: number;
 }
 
-export type ComponentType = 'memory' | 'decoder' | 'source';
+export type ComponentType = 'memory' | 'decoder' | 'source' | 'text' | 'shape';
 
 export interface BaseComponent extends Rect {
   id: string;
@@ -30,6 +30,7 @@ export interface BaseComponent extends Rect {
   title: string;
   pins: Pin[];
   color?: string;
+  locked?: boolean;
 }
 
 export interface MemoryComponent extends BaseComponent {
@@ -48,7 +49,18 @@ export interface SourceComponent extends BaseComponent {
   type: 'source';
 }
 
-export type DiagramComponent = MemoryComponent | DecoderComponent | SourceComponent;
+export interface TextComponent extends BaseComponent {
+  type: 'text';
+  text: string;
+  fontSize: number;
+}
+
+export interface ShapeComponent extends BaseComponent {
+  type: 'shape';
+  fillColor?: string;
+}
+
+export type DiagramComponent = MemoryComponent | DecoderComponent | SourceComponent | TextComponent | ShapeComponent;
 
 export interface JointNode extends Point {
   id: string;

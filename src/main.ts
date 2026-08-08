@@ -234,6 +234,36 @@ canvasEl.addEventListener('drop', (e: DragEvent) => {
         };
         state.addComponent(srcComponent);
         state.commit();
+      } else if (componentType === 'text') {
+        const textComponent = {
+          id: generateId(),
+          type: 'text' as const,
+          title: 'Texto',
+          text: 'Escribe aquí...',
+          fontSize: 14,
+          x: snappedX,
+          y: snappedY,
+          width: 100,
+          height: 40,
+          color: 'transparent',
+          pins: []
+        };
+        state.addComponent(textComponent);
+        state.commit();
+      } else if (componentType === 'shape') {
+        const shapeComponent = {
+          id: generateId(),
+          type: 'shape' as const,
+          title: 'Forma',
+          fillColor: 'transparent',
+          x: snappedX,
+          y: snappedY,
+          width: 100,
+          height: 100,
+          pins: []
+        };
+        state.addComponent(shapeComponent);
+        state.commit();
       }
     }
   }

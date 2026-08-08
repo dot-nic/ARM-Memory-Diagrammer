@@ -44,7 +44,7 @@ export class InteractionManager {
 
   // Component Resizing State
   private isResizingComponent: boolean = false;
-  private resizeHandle: 'top' | 'bottom' | 'left' | 'right' | null = null;
+  private resizeHandle: 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | null = null;
   private resizingComponentId: string | null = null;
   private resizeStartRect: { x: number, y: number, width: number, height: number } | null = null;
   private resizeStartMousePos: Point | null = null;
@@ -59,13 +59,13 @@ export class InteractionManager {
     this.canvasManager = canvasManager;
     this.state = state;
     this.grid = grid;
-    
+
     this.attachEvents();
   }
 
   private attachEvents() {
     const canvas = this.canvasManager.canvas;
-    
+
     canvas.addEventListener('mousedown', this.onMouseDown.bind(this));
     window.addEventListener('mousemove', this.onMouseMove.bind(this));
     window.addEventListener('mouseup', this.onMouseUp.bind(this));
@@ -74,12 +74,12 @@ export class InteractionManager {
 
   private onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      // Avoid deleting if typing in an input field
-      if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+      // Avoid deleting if typing in an input field or textarea
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
       this.state.deleteSelected();
       this.state.commit();
     }
-    
+
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'z' || e.key === 'Z') {
         if (e.shiftKey) {
@@ -96,16 +96,10 @@ export class InteractionManager {
         return;
       }
       if (e.key === 'c' || e.key === 'C') {
-        if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-        // In a more complex app we'd copy to a clipboard, but here we can just clone directly on paste,
-        // or just clone immediately on C or V. The spec says Ctrl+C then Ctrl+V.
-        // For simplicity, we just clone on Ctrl+V or Ctrl+C. Let's do it on Ctrl+D maybe?
-        // Let's implement copy/paste by just remembering what to copy. Actually DiagramState can handle it.
-        // Let's just call cloneSelectedComponents on Ctrl+C for now as a quick duplicate, 
-        // or trigger it on Ctrl+V.
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
       }
       if (e.key === 'v' || e.key === 'V') {
-        if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
         this.state.cloneSelectedComponents();
         this.state.commit();
       }
@@ -116,7 +110,7 @@ export class InteractionManager {
     const rect = this.canvasManager.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     return {
       x: (x - this.canvasManager.offset.x) / this.canvasManager.scale,
       y: (y - this.canvasManager.offset.y) / this.canvasManager.scale
@@ -137,26 +131,30 @@ export class InteractionManager {
     return null;
   }
 
-  private hitTestResizeHandle(worldPos: Point): { component: DiagramComponent, handle: 'top' | 'bottom' | 'left' | 'right' } | null {
+  private hitTestResizeHandle(worldPos: Point): { component: DiagramComponent, handle: 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' } | null {
     const selectedIds = this.state.getSelectedComponentIds();
     if (selectedIds.length !== 1) return null;
-    
+
     const comp = this.state.getComponents().find(c => c.id === selectedIds[0]);
-    if (!comp) return null;
-    
+    if (!comp || comp.locked) return null;
+
     const handles = {
       top: { x: comp.x + comp.width / 2, y: comp.y - 4 },
       bottom: { x: comp.x + comp.width / 2, y: comp.y + comp.height + 4 },
       left: { x: comp.x - 4, y: comp.y + comp.height / 2 },
-      right: { x: comp.x + comp.width + 4, y: comp.y + comp.height / 2 }
+      right: { x: comp.x + comp.width + 4, y: comp.y + comp.height / 2 },
+      'top-left': { x: comp.x - 4, y: comp.y - 4 },
+      'top-right': { x: comp.x + comp.width + 4, y: comp.y - 4 },
+      'bottom-left': { x: comp.x - 4, y: comp.y + comp.height + 4 },
+      'bottom-right': { x: comp.x + comp.width + 4, y: comp.y + comp.height + 4 }
     };
-    
+
     for (const [handle, pos] of Object.entries(handles)) {
       if (Math.hypot(worldPos.x - pos.x, worldPos.y - pos.y) < 8) {
         return { component: comp, handle: handle as any };
       }
     }
-    
+
     return null;
   }
 
@@ -171,6 +169,22 @@ export class InteractionManager {
         worldPos.y <= comp.y + comp.height
       ) {
         return comp;
+      }
+    }
+    return null;
+  }
+
+  private hitTestPadlock(worldPos: Point): DiagramComponent | null {
+    const components = this.state.getComponents();
+    for (let i = components.length - 1; i >= 0; i--) {
+      const comp = components[i];
+      const padX = comp.x + comp.width - 12;
+      const padY = comp.y + 12;
+      
+      if (Math.abs(worldPos.x - padX) < 12 && Math.abs(worldPos.y - padY) < 12) {
+        if (comp.locked || this.state.getHoveredComponentId() === comp.id) {
+          return comp;
+        }
       }
     }
     return null;
@@ -193,10 +207,10 @@ export class InteractionManager {
   private projectPointOnPath(p: Point, path: Point[]): Point {
     let minDist = Infinity;
     let bestPoint = p;
-    
+
     for (let i = 0; i < path.length - 1; i++) {
       const v = path[i];
-      const w = path[i+1];
+      const w = path[i + 1];
       const l2 = (v.x - w.x) ** 2 + (v.y - w.y) ** 2;
       let t = 0;
       if (l2 !== 0) {
@@ -206,7 +220,7 @@ export class InteractionManager {
       const projX = v.x + t * (w.x - v.x);
       const projY = v.y + t * (w.y - v.y);
       const dist = Math.hypot(p.x - projX, p.y - projY);
-      
+
       if (dist < minDist) {
         minDist = dist;
         bestPoint = { x: projX, y: projY };
@@ -217,68 +231,68 @@ export class InteractionManager {
 
   private hitTestConnectionAnnotations(worldPos: Point): { connection: Connection, type: 'label' | 'width' } | null {
     const connections = this.state.getConnections();
-    
+
     for (const conn of connections) {
       const path = this.getComputedPath(conn);
-      
+
       let longestSegmentIndex = 0;
       let maxDist = -1;
       for (let i = 0; i < path.length - 1; i++) {
-        const dist = Math.hypot(path[i+1].x - path[i].x, path[i+1].y - path[i].y);
+        const dist = Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y);
         if (dist > maxDist) {
           maxDist = dist;
           longestSegmentIndex = i;
         }
       }
-      
+
       if (maxDist > 10) {
         const p1 = path[longestSegmentIndex];
-        const p2 = path[longestSegmentIndex+1];
-        
+        const p2 = path[longestSegmentIndex + 1];
+
         let lx = (p1.x + p2.x) / 2;
         let ly = (p1.y + p2.y) / 2;
-        
+
         let wx = lx;
         let wy = ly;
-        
+
         if (conn.widthPos) {
-           wx = conn.widthPos.x;
-           wy = conn.widthPos.y;
+          wx = conn.widthPos.x;
+          wy = conn.widthPos.y;
         }
-        
+
         if (conn.labelOffset) {
-           lx += conn.labelOffset.x;
-           ly += conn.labelOffset.y;
+          lx += conn.labelOffset.x;
+          ly += conn.labelOffset.y;
         }
-        
+
         // Width bounding box
         if (conn.busWidth && conn.busWidth > 1) {
-           if (Math.abs(worldPos.x - (wx + 8)) < 15 && Math.abs(worldPos.y - (wy - 6)) < 15) {
-              return { connection: conn, type: 'width' };
-           }
+          if (Math.abs(worldPos.x - (wx + 8)) < 15 && Math.abs(worldPos.y - (wy - 6)) < 15) {
+            return { connection: conn, type: 'width' };
+          }
         }
-        
+
         // Label bounding box
         if (conn.label) {
-           const offset = (conn.busWidth && conn.busWidth > 1) ? 20 : 8;
-           if (Math.abs(worldPos.x - lx) < 20 && Math.abs(worldPos.y - (ly - offset)) < 15) {
-              return { connection: conn, type: 'label' };
-           }
+          const offset = (conn.busWidth && conn.busWidth > 1) ? 20 : 8;
+          if (Math.abs(worldPos.x - lx) < 20 && Math.abs(worldPos.y - (ly - offset)) < 15) {
+            return { connection: conn, type: 'label' };
+          }
         }
       }
     }
-    
+
     return null;
   }
 
   private hitTestConnectionSegment(worldPos: Point): { connection: Connection, segmentIndex: number } | null {
     const connections = this.state.getConnections();
-    
+
     for (const conn of connections) {
       const path = this.getComputedPath(conn);
-      
+
       for (let i = 0; i < path.length - 1; i++) {
-        const dist = this.pointToSegmentDist(worldPos, path[i], path[i+1]);
+        const dist = this.pointToSegmentDist(worldPos, path[i], path[i + 1]);
         if (dist < 8) {
           return { connection: conn, segmentIndex: i };
         }
@@ -290,7 +304,7 @@ export class InteractionManager {
   private getComputedPath(conn: Connection): Point[] {
     const startPos = this.getTargetPosition(conn.source);
     const endPos = this.getTargetPosition(conn.target);
-    
+
     if (!startPos || !endPos) return [];
 
     let path: Point[] = [];
@@ -298,13 +312,13 @@ export class InteractionManager {
       path = conn.waypoints.map((p: Point) => ({ x: p.x, y: p.y }));
       const oldStart = { ...path[0] };
       const oldEnd = { ...path[path.length - 1] };
-      
+
       path[0] = { x: startPos.x, y: startPos.y };
       path[path.length - 1] = { x: endPos.x, y: endPos.y };
-      
+
       if (Math.abs(oldStart.y - path[1].y) < 0.1) path[1].y = startPos.y;
       else path[1].x = startPos.x;
-      
+
       if (Math.abs(oldEnd.y - path[path.length - 2].y) < 0.1) path[path.length - 2].y = endPos.y;
       else path[path.length - 2].x = endPos.x;
     } else {
@@ -316,18 +330,18 @@ export class InteractionManager {
   private hitTestConnectionEndpoint(worldPos: Point): { connection: Connection, endpoint: 'source' | 'target' } | null {
     const connections = this.state.getConnections();
     const selectedIds = this.state.getSelectedConnectionIds();
-    
+
     // We only test selected connections for endpoints to avoid accidental grabs
     for (const conn of connections) {
       if (!selectedIds.includes(conn.id)) continue;
-      
+
       if (conn.source.type !== 'joint') {
         const startPos = this.getTargetPosition(conn.source);
         if (startPos && Math.hypot(worldPos.x - startPos.x, worldPos.y - startPos.y) < 8) {
           return { connection: conn, endpoint: 'source' };
         }
       }
-      
+
       if (conn.target.type !== 'joint') {
         const endPos = this.getTargetPosition(conn.target);
         if (endPos && Math.hypot(worldPos.x - endPos.x, worldPos.y - endPos.y) < 8) {
@@ -401,17 +415,36 @@ export class InteractionManager {
       return;
     }
 
+    // 0.75 Try to hit padlock
+    const hitPadlock = this.hitTestPadlock(worldPos);
+    if (hitPadlock) {
+      const newLockedState = !hitPadlock.locked;
+      const selectedIds = this.state.getSelectedComponentIds();
+      
+      if (selectedIds.includes(hitPadlock.id) && selectedIds.length > 1) {
+        selectedIds.forEach(id => this.state.setComponentLock(id, newLockedState, true));
+        this.state.commit();
+        this.canvasManager.render();
+      } else {
+        this.state.setComponentLock(hitPadlock.id, newLockedState);
+        this.state.commit();
+        this.canvasManager.render();
+      }
+      e.preventDefault();
+      return;
+    }
+
     // 0. Try to hit a connection endpoint handle (has highest priority)
     const hitEndpoint = this.hitTestConnectionEndpoint(worldPos);
     if (hitEndpoint) {
       this.activeRevertConnection = hitEndpoint.connection;
       this.state.removeConnection(hitEndpoint.connection.id); // Temporarily hide it
-      
+
       this.isDrawingConnection = true;
       // If we grabbed the source, the fixed part is the target, and vice versa.
       this.activeConnectionSource = hitEndpoint.endpoint === 'source' ? hitEndpoint.connection.target : hitEndpoint.connection.source;
       this.activeConnectionStartPos = this.getTargetPosition(this.activeConnectionSource);
-      
+
       e.preventDefault();
       return;
     }
@@ -430,11 +463,11 @@ export class InteractionManager {
     const hitJointId = this.hitTestJoint(worldPos);
     if (hitJointId) {
       // Find the collinear connections that form the main bus
-      const conns = this.state.getConnections().filter(c => 
+      const conns = this.state.getConnections().filter(c =>
         (c.source.type === 'joint' && c.source.jointId === hitJointId) ||
         (c.target.type === 'joint' && c.target.jointId === hitJointId)
       );
-      
+
       // Determine the axis. If there's a horizontal segment and a vertical one,
       // we can check the path of the connections attached.
       // A simple heuristic: if it's connected to two collinear segments, we can infer axis.
@@ -443,17 +476,17 @@ export class InteractionManager {
       // For now, allow both X and Y drag, it will naturally slide if constrained, or just free drag.
       // But the user requested "junto con el eje". We will determine axis by checking the two connections
       // that have the same busWidth/color (the main bus).
-      
+
       this.isDraggingJoint = true;
       this.draggedJointId = hitJointId;
-      
+
       let axis: 'x' | 'y' | null = null;
       if (conns.length >= 2) {
         const p1 = this.getTargetPosition(conns[0].source.type === 'joint' && conns[0].source.jointId === hitJointId ? conns[0].target : conns[0].source);
         const p2 = this.getTargetPosition(conns[1].source.type === 'joint' && conns[1].source.jointId === hitJointId ? conns[1].target : conns[1].source);
         if (p1 && p2) {
-           if (Math.abs(p1.y - p2.y) < 5) axis = 'x';
-           else if (Math.abs(p1.x - p2.x) < 5) axis = 'y';
+          if (Math.abs(p1.y - p2.y) < 5) axis = 'x';
+          else if (Math.abs(p1.x - p2.x) < 5) axis = 'y';
         }
       }
       this.draggedJointAxis = axis;
@@ -472,10 +505,20 @@ export class InteractionManager {
         this.state.setSelectedComponentIds([hitComponent.id]);
         selectedIds = [hitComponent.id];
       }
-      
+
+      const anyLocked = selectedIds.some(id => {
+        const c = this.state.getComponents().find(comp => comp.id === id);
+        return c && c.locked;
+      });
+
+      if (anyLocked) {
+        e.preventDefault();
+        return;
+      }
+
       this.isDraggingComponent = true;
       this.draggingComponentId = hitComponent.id;
-      
+
       // Save starting positions for all selected components
       this.dragStartPositions.clear();
       this.dragStartWaypoints.clear();
@@ -489,7 +532,7 @@ export class InteractionManager {
         const sourceHit = conn.source.type === 'pin' && selectedIds.includes(conn.source.componentId);
         const targetHit = conn.target.type === 'pin' && selectedIds.includes(conn.target.componentId);
         if ((sourceHit || targetHit) && conn.waypoints && conn.waypoints.length > 0) {
-          this.dragStartWaypoints.set(conn.id, conn.waypoints.map(w => ({...w})));
+          this.dragStartWaypoints.set(conn.id, conn.waypoints.map(w => ({ ...w })));
         }
       });
 
@@ -511,7 +554,7 @@ export class InteractionManager {
         };
         this.activeConnectionSource = null;
         this.activeConnectionStartPos = { ...this.hoveredConnectionPos };
-        
+
         this.hoveredConnection = null;
         this.hoveredConnectionPos = null;
         e.preventDefault();
@@ -525,17 +568,17 @@ export class InteractionManager {
       this.isDraggingAnnotation = true;
       this.draggedAnnotationType = hitAnnotation.type;
       this.draggedAnnotationConnId = hitAnnotation.connection.id;
-      
+
       const conn = hitAnnotation.connection;
       if (hitAnnotation.type === 'label') {
-         this.dragAnnotationStartOffset = conn.labelOffset ? { ...conn.labelOffset } : { x: 0, y: 0 };
+        this.dragAnnotationStartOffset = conn.labelOffset ? { ...conn.labelOffset } : { x: 0, y: 0 };
       } else {
-         // for width, we don't strictly need a start offset since we snap it to the path based on absolute mouse pos
-         this.dragAnnotationStartOffset = null;
+        // for width, we don't strictly need a start offset since we snap it to the path based on absolute mouse pos
+        this.dragAnnotationStartOffset = null;
       }
-      
+
       this.mouseWorldPos = worldPos;
-      
+
       e.preventDefault();
       return;
     }
@@ -545,16 +588,16 @@ export class InteractionManager {
     if (hitSegment) {
       this.state.setSelectedComponentIds([]);
       this.state.setSelectedConnectionIds([hitSegment.connection.id]);
-      
+
       this.isDraggingConnectionSegment = true;
       this.draggedConnectionId = hitSegment.connection.id;
       this.draggedSegmentIndex = hitSegment.segmentIndex;
       this.dragSegmentStartPos = worldPos;
-      
+
       if (!hitSegment.connection.waypoints || hitSegment.connection.waypoints.length < 4) {
         hitSegment.connection.waypoints = this.getComputedPath(hitSegment.connection);
       }
-      
+
       e.preventDefault();
       return;
     }
@@ -573,25 +616,25 @@ export class InteractionManager {
       if (joint) {
         let newX = worldPos.x;
         let newY = worldPos.y;
-        
+
         if (this.draggedJointAxis === 'x') {
           newY = joint.y; // constrain Y
         } else if (this.draggedJointAxis === 'y') {
           newX = joint.x; // constrain X
         }
-        
+
         joint.x = this.grid.snap(newX);
         joint.y = this.grid.snap(newY);
-        
+
         // Waypoints of connections connected to this joint might need to be cleared
         // so they re-route properly.
         this.state.getConnections().forEach(c => {
-           if ((c.source.type === 'joint' && c.source.jointId === joint.id) ||
-               (c.target.type === 'joint' && c.target.jointId === joint.id)) {
-             c.waypoints = [];
-           }
+          if ((c.source.type === 'joint' && c.source.jointId === joint.id) ||
+            (c.target.type === 'joint' && c.target.jointId === joint.id)) {
+            c.waypoints = [];
+          }
         });
-        
+
         this.canvasManager.render();
       }
       return;
@@ -604,7 +647,7 @@ export class InteractionManager {
         const path = this.getComputedPath(hitSegment.connection);
         const p1 = path[hitSegment.segmentIndex];
         const p2 = path[hitSegment.segmentIndex + 1];
-        
+
         this.hoveredConnectionPos = {
           x: (p1.x + p2.x) / 2,
           y: (p1.y + p2.y) / 2
@@ -613,6 +656,10 @@ export class InteractionManager {
         this.hoveredConnection = null;
         this.hoveredConnectionPos = null;
       }
+      
+      const hitComponent = this.hitTestComponent(worldPos);
+      this.state.setHoveredComponentId(hitComponent ? hitComponent.id : null);
+      
       this.canvasManager.render();
     }
 
@@ -620,31 +667,31 @@ export class InteractionManager {
       const conn = this.state.getConnections().find(c => c.id === this.draggedAnnotationConnId);
       if (conn) {
         if (this.draggedAnnotationType === 'label' && this.dragAnnotationStartOffset) {
-           const path = this.getComputedPath(conn);
-           let longestSegmentIndex = 0;
-           let maxDist = -1;
-           for (let i = 0; i < path.length - 1; i++) {
-             const dist = Math.hypot(path[i+1].x - path[i].x, path[i+1].y - path[i].y);
-             if (dist > maxDist) { maxDist = dist; longestSegmentIndex = i; }
-           }
-           
-           if (maxDist > 10) {
-             const p1 = path[longestSegmentIndex];
-             const p2 = path[longestSegmentIndex+1];
-             const baseLx = (p1.x + p2.x) / 2;
-             const baseLy = (p1.y + p2.y) / 2;
-             
-             // The offset is simply mouse pos minus base pos
-             const newOffset = {
-               x: worldPos.x - baseLx,
-               y: worldPos.y - baseLy
-             };
-             this.state.updateConnectionAnnotations(conn.id, newOffset, conn.widthPos, true);
-           }
+          const path = this.getComputedPath(conn);
+          let longestSegmentIndex = 0;
+          let maxDist = -1;
+          for (let i = 0; i < path.length - 1; i++) {
+            const dist = Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y);
+            if (dist > maxDist) { maxDist = dist; longestSegmentIndex = i; }
+          }
+
+          if (maxDist > 10) {
+            const p1 = path[longestSegmentIndex];
+            const p2 = path[longestSegmentIndex + 1];
+            const baseLx = (p1.x + p2.x) / 2;
+            const baseLy = (p1.y + p2.y) / 2;
+
+            // The offset is simply mouse pos minus base pos
+            const newOffset = {
+              x: worldPos.x - baseLx,
+              y: worldPos.y - baseLy
+            };
+            this.state.updateConnectionAnnotations(conn.id, newOffset, conn.widthPos, true);
+          }
         } else if (this.draggedAnnotationType === 'width') {
-           const path = this.getComputedPath(conn);
-           const projected = this.projectPointOnPath(worldPos, path);
-           this.state.updateConnectionAnnotations(conn.id, conn.labelOffset, projected, true);
+          const path = this.getComputedPath(conn);
+          const projected = this.projectPointOnPath(worldPos, path);
+          this.state.updateConnectionAnnotations(conn.id, conn.labelOffset, projected, true);
         }
         this.canvasManager.render();
       }
@@ -667,34 +714,33 @@ export class InteractionManager {
       let { x, y, width, height } = this.resizeStartRect;
       const dx = worldPos.x - this.resizeStartMousePos.x;
       const dy = worldPos.y - this.resizeStartMousePos.y;
-      
-      switch (this.resizeHandle) {
-        case 'right':
-          width = Math.max(40, width + dx);
-          width = this.grid.snap(width);
-          break;
-        case 'bottom':
-          height = Math.max(40, height + dy);
-          height = this.grid.snap(height);
-          break;
-        case 'left':
-          const snappedDx = this.grid.snap(dx);
-          const newWidth = Math.max(40, width - snappedDx);
-          if (newWidth > 40 || width - snappedDx === 40) {
-            x += snappedDx;
-            width = newWidth;
-          }
-          break;
-        case 'top':
-          const snappedDy = this.grid.snap(dy);
-          const newHeight = Math.max(40, height - snappedDy);
-          if (newHeight > 40 || height - snappedDy === 40) {
-            y += snappedDy;
-            height = newHeight;
-          }
-          break;
+
+      const snappedDx = this.grid.snap(dx);
+      const snappedDy = this.grid.snap(dy);
+
+      if (this.resizeHandle.includes('right')) {
+        width = Math.max(40, width + dx);
+        width = this.grid.snap(width);
       }
-      
+      if (this.resizeHandle.includes('bottom')) {
+        height = Math.max(40, height + dy);
+        height = this.grid.snap(height);
+      }
+      if (this.resizeHandle.includes('left')) {
+        const newWidth = Math.max(40, width - snappedDx);
+        if (newWidth > 40 || width - snappedDx === 40) {
+          x += snappedDx;
+          width = newWidth;
+        }
+      }
+      if (this.resizeHandle.includes('top')) {
+        const newHeight = Math.max(40, height - snappedDy);
+        if (newHeight > 40 || height - snappedDy === 40) {
+          y += snappedDy;
+          height = newHeight;
+        }
+      }
+
       this.state.updateComponentRect(this.resizingComponentId, x, y, width, height);
       return;
     }
@@ -704,21 +750,21 @@ export class InteractionManager {
       if (conn && conn.waypoints && conn.waypoints.length >= 4) {
         const dx = worldPos.x - this.dragSegmentStartPos.x;
         const dy = worldPos.y - this.dragSegmentStartPos.y;
-        
+
         const i = this.draggedSegmentIndex;
         const p1 = conn.waypoints[i];
-        const p2 = conn.waypoints[i+1];
-        
+        const p2 = conn.waypoints[i + 1];
+
         const isHorizontal = Math.abs(p1.y - p2.y) < 0.1;
-        
+
         if (isHorizontal) {
-           p1.y += dy;
-           p2.y += dy;
+          p1.y += dy;
+          p2.y += dy;
         } else {
-           p1.x += dx;
-           p2.x += dx;
+          p1.x += dx;
+          p2.x += dx;
         }
-        
+
         this.dragSegmentStartPos = worldPos;
         this.canvasManager.render();
       }
@@ -728,9 +774,9 @@ export class InteractionManager {
     if (this.isDraggingComponent && this.draggingComponentId) {
       let dx = worldPos.x - this.dragOffset.x - this.dragStartPositions.get(this.draggingComponentId)!.x;
       let dy = worldPos.y - this.dragOffset.y - this.dragStartPositions.get(this.draggingComponentId)!.y;
-      
+
       const selectedIds = this.state.getSelectedComponentIds();
-      
+
       const startPos = this.dragStartPositions.get(this.draggingComponentId);
       let snappedDx = 0;
       let snappedDy = 0;
@@ -765,7 +811,7 @@ export class InteractionManager {
       const maxY = Math.max(this.selectionStartPos.y, this.selectionEndPos.y);
 
       const components = this.state.getComponents();
-      const selectedIds = components.filter(c => 
+      const selectedIds = components.filter(c =>
         c.x + c.width >= minX && c.x <= maxX &&
         c.y + c.height >= minY && c.y <= maxY
       ).map(c => c.id);
@@ -807,7 +853,7 @@ export class InteractionManager {
     if (this.isDrawingConnection && (this.activeConnectionSource || this.pendingBranchConnection)) {
       const worldPos = this.getMouseWorldPos(e);
       let connectionCreated = false;
-      
+
       // Try to connect to a pin
       const targetPin = this.hitTestPin(worldPos);
       if (targetPin) {
@@ -823,7 +869,7 @@ export class InteractionManager {
           const parentConn = this.pendingBranchConnection.connection;
           const oldTarget = parentConn.target;
           parentConn.target = { type: 'joint', jointId };
-          
+
           this.state.addConnection({
             id: Math.random().toString(36).substring(2, 9),
             source: { type: 'joint', jointId },
@@ -866,7 +912,7 @@ export class InteractionManager {
         const targetConnection = this.hitTestConnection(worldPos);
         if (targetConnection) {
           const jointId = Math.random().toString(36).substring(2, 9);
-          
+
           this.state.addJoint({
             id: jointId,
             x: worldPos.x,
@@ -876,7 +922,7 @@ export class InteractionManager {
           // Redirect old connection target to joint
           const oldTarget = targetConnection.target;
           targetConnection.target = { type: 'joint', jointId };
-          
+
           // Create connection from joint to old target
           this.state.addConnection({
             id: Math.random().toString(36).substring(2, 9),
@@ -915,7 +961,7 @@ export class InteractionManager {
       this.activeRevertConnection = null;
       this.canvasManager.render();
     }
-    
+
     if (this.isDraggingConnectionSegment) {
       this.isDraggingConnectionSegment = false;
       this.draggedConnectionId = null;
@@ -928,7 +974,7 @@ export class InteractionManager {
         this.state.getConnections().find(c => c.id === this.state.getSelectedConnectionIds()[0])?.color
       );
     }
-    
+
     if (this.isResizingComponent) {
       this.isResizingComponent = false;
       this.resizingComponentId = null;
@@ -941,7 +987,7 @@ export class InteractionManager {
     this.draggingComponentId = null;
     this.dragStartPositions.clear();
     this.dragStartWaypoints.clear();
-    
+
     this.state.commit();
   }
 
@@ -957,7 +1003,7 @@ export class InteractionManager {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
-      
+
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -974,9 +1020,9 @@ export class InteractionManager {
       ctx.lineWidth = 2;
       ctx.strokeStyle = '#9ca3af'; // Gray for active drawing
       ctx.setLineDash([5, 5]);
-      
+
       const path = this.calculateOrthogonalPath(this.activeConnectionStartPos, this.mouseWorldPos);
-      
+
       ctx.beginPath();
       ctx.moveTo(path[0].x, path[0].y);
       for (let i = 1; i < path.length; i++) {
@@ -985,19 +1031,19 @@ export class InteractionManager {
       ctx.stroke();
       ctx.restore();
     }
-    
+
     if (this.isSelectingBox && this.selectionStartPos && this.selectionEndPos) {
       ctx.save();
       ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
       ctx.strokeStyle = '#3b82f6';
       ctx.lineWidth = 1;
-      
+
       const width = this.selectionEndPos.x - this.selectionStartPos.x;
       const height = this.selectionEndPos.y - this.selectionStartPos.y;
-      
+
       ctx.fillRect(this.selectionStartPos.x, this.selectionStartPos.y, width, height);
       ctx.strokeRect(this.selectionStartPos.x, this.selectionStartPos.y, width, height);
-      
+
       ctx.restore();
     }
   }

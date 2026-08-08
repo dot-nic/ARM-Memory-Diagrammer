@@ -6,6 +6,7 @@ export class PropertiesPanel {
   private panelEl: HTMLElement;
   private contentEl: HTMLElement;
   private currentSelection: string[] = [];
+  private currentSelectionLocked: boolean[] = [];
 
   constructor(state: DiagramState) {
     this.state = state;
@@ -22,11 +23,20 @@ export class PropertiesPanel {
     
     const allSelected = [...selectedComponentIds, ...selectedConnectionIds];
     
-    const changed = this.currentSelection.length !== allSelected.length || 
+    const currentLockedStates = selectedComponentIds.map(id => {
+      const comp = this.state.getComponents().find(c => c.id === id);
+      return comp ? !!comp.locked : false;
+    });
+    
+    const selectionChanged = this.currentSelection.length !== allSelected.length || 
                     !this.currentSelection.every((id, i) => id === allSelected[i]);
                     
-    if (changed) {
+    const lockChanged = this.currentSelectionLocked.length !== currentLockedStates.length ||
+                    !this.currentSelectionLocked.every((l, i) => l === currentLockedStates[i]);
+                    
+    if (selectionChanged || lockChanged) {
       this.currentSelection = [...allSelected];
+      this.currentSelectionLocked = currentLockedStates;
       this.render();
     }
   }
@@ -51,6 +61,44 @@ export class PropertiesPanel {
     const selectedMemories = selectedComponents.filter(c => c.type === 'memory') as MemoryComponent[];
     const selectedDecoders = selectedComponents.filter(c => c.type === 'decoder') as DecoderComponent[];
     const selectedSources = selectedComponents.filter(c => c.type === 'source');
+    const selectedTexts = selectedComponents.filter(c => c.type === 'text') as any[];
+    const selectedShapes = selectedComponents.filter(c => c.type === 'shape') as any[];
+
+    // Render lock toggle
+    if (selectedComponents.length > 0) {
+      const firstComp = selectedComponents[0];
+      const sameLocked = selectedComponents.every(c => !!c.locked === !!firstComp.locked) ? !!firstComp.locked : false;
+
+      const lockGroup = document.createElement('div');
+      lockGroup.className = 'prop-group toggle-row';
+      const safeId = 'toggle-lock-' + Math.random().toString(36).substr(2,5);
+      lockGroup.innerHTML = `
+        <span class="toggle-label">Bloqueado 🔒</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="${safeId}" ${sameLocked ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+      `;
+      this.contentEl.appendChild(lockGroup);
+      
+      const lockCheckbox = lockGroup.querySelector(`#${safeId}`) as HTMLInputElement;
+      lockCheckbox.addEventListener('change', () => {
+        selectedComponents.forEach((c, idx) => {
+          this.state.setComponentLock(c.id, lockCheckbox.checked, idx < selectedComponents.length - 1);
+        });
+        this.state.commit();
+      });
+
+      const anyLocked = selectedComponents.some(c => c.locked);
+      if (anyLocked) {
+        const msg = document.createElement('p');
+        msg.style.fontSize = '0.85rem';
+        msg.style.color = 'var(--text-secondary)';
+        msg.textContent = 'Desbloquea para editar sus propiedades.';
+        this.contentEl.appendChild(msg);
+        return; // Don't render other properties
+      }
+    }
 
     if (selectedComponents.length > 0) {
       this.renderComponentGeneralProps(selectedComponents);
@@ -58,6 +106,12 @@ export class PropertiesPanel {
     
     if (selectedConnections.length > 0) {
       this.renderConnectionProps(selectedConnections);
+    }
+    if (selectedTexts.length > 0) {
+      this.renderTextProps(selectedTexts);
+    }
+    if (selectedShapes.length > 0) {
+      this.renderShapeProps(selectedShapes);
     }
     if (selectedMemories.length > 0) {
       this.renderMemoryProps(selectedMemories);
@@ -266,17 +320,98 @@ export class PropertiesPanel {
     this.addSeparator();
   }
 
+  private renderTextProps(comps: any[]) {
+    this.addSectionTitle(`Textos Seleccionados (${comps.length})`);
+    
+    const first = comps[0];
+    const sameText = comps.every(c => c.text === first.text) ? first.text : '';
+    const sameFontSize = comps.every(c => c.fontSize === first.fontSize) ? first.fontSize : '';
+
+    const group = document.createElement('div');
+    group.className = 'prop-group';
+    group.innerHTML = `
+      <label>Contenido del Texto</label>
+      <textarea class="prop-input text-content" rows="3" placeholder="${sameText === '' && comps.length > 1 ? '(Varios)' : 'Escribe aquí...'}">${sameText}</textarea>
+    `;
+    this.contentEl.appendChild(group);
+
+    const sizeGroup = document.createElement('div');
+    sizeGroup.className = 'prop-group';
+    sizeGroup.innerHTML = `
+      <label>Tamaño de Fuente (px)</label>
+      <input type="number" class="prop-input text-size" value="${sameFontSize}" placeholder="${sameFontSize === '' ? '(Varios)' : '14'}" min="8" max="72" />
+    `;
+    this.contentEl.appendChild(sizeGroup);
+
+    const textInput = group.querySelector('.text-content') as HTMLTextAreaElement;
+    const sizeInput = sizeGroup.querySelector('.text-size') as HTMLInputElement;
+
+    const update = () => {
+      comps.forEach((c, idx) => {
+        const text = textInput.value !== '' ? textInput.value : c.text;
+        const size = isNaN(parseInt(sizeInput.value, 10)) ? c.fontSize : parseInt(sizeInput.value, 10);
+        this.state.updateTextProps(c.id, text, size, idx < comps.length - 1);
+      });
+      this.state.commit();
+    };
+
+    textInput.addEventListener('change', update);
+    sizeInput.addEventListener('change', update);
+    
+    this.addSeparator();
+  }
+
+  private renderShapeProps(comps: any[]) {
+    this.addSectionTitle(`Formas Seleccionadas (${comps.length})`);
+    
+    const first = comps[0];
+    const sameColor = comps.every(c => c.fillColor === first.fillColor) ? (first.fillColor || 'transparent') : '';
+
+    const colorPicker = this.renderColorPicker('Color de Relleno', sameColor, (color) => {
+      comps.forEach((c, idx) => {
+        this.state.updateShapeProps(c.id, color, idx < comps.length - 1);
+      });
+      this.state.commit();
+    });
+    this.contentEl.appendChild(colorPicker);
+
+    // Option to set transparent
+    const transBtn = document.createElement('button');
+    transBtn.className = 'prop-input';
+    transBtn.textContent = 'Hacer Transparente';
+    transBtn.style.marginTop = '8px';
+    transBtn.style.cursor = 'pointer';
+    transBtn.onclick = () => {
+      comps.forEach((c, idx) => {
+        this.state.updateShapeProps(c.id, 'transparent', idx < comps.length - 1);
+      });
+      this.state.commit();
+    };
+    this.contentEl.appendChild(transBtn);
+    
+    this.addSeparator();
+  }
+
   private renderMemoryProps(comps: MemoryComponent[]) {
     this.addSectionTitle(`Memorias Seleccionadas (${comps.length})`);
     
     const first = comps[0];
+    const sameTitle = comps.every(c => c.title === first.title) ? first.title : '';
     const sameWords = comps.every(c => c.wordsStr === first.wordsStr) ? first.wordsStr : '';
     const sameBits = comps.every(c => c.bits === first.bits) ? first.bits : '';
+
+    const titleGroup = document.createElement('div');
+    titleGroup.className = 'prop-group';
+    titleGroup.innerHTML = `
+      <label>Nombre de la Memoria</label>
+      <input type="text" class="prop-input mem-title" value="${sameTitle}" placeholder="${sameTitle === '' ? 'Varios' : 'RAM'}" />
+    `;
+    this.contentEl.appendChild(titleGroup);
 
     const wordsGroup = document.createElement('div');
     wordsGroup.className = 'prop-group';
     wordsGroup.innerHTML = `
-      <label>Words (ej. 1K, 2M)</label>
+      <label>Palabras (ej. 1K, 2M)</label>
       <input type="text" class="prop-input mem-words" value="${sameWords}" placeholder="${sameWords === '' ? 'Varios' : ''}" />
     `;
     this.contentEl.appendChild(wordsGroup);
@@ -289,18 +424,21 @@ export class PropertiesPanel {
     `;
     this.contentEl.appendChild(bitsGroup);
 
+    const titleInput = titleGroup.querySelector('.mem-title') as HTMLInputElement;
     const wordsInput = wordsGroup.querySelector('.mem-words') as HTMLInputElement;
     const bitsInput = bitsGroup.querySelector('.mem-bits') as HTMLInputElement;
 
     const update = () => {
       comps.forEach((c, idx) => {
+        const title = titleInput.value !== '' ? titleInput.value : c.title;
         const words = wordsInput.value !== '' ? wordsInput.value : c.wordsStr;
         const bits = isNaN(parseInt(bitsInput.value, 10)) ? c.bits : parseInt(bitsInput.value, 10);
-        this.state.updateMemoryProps(c.id, words, bits, idx < comps.length - 1);
+        this.state.updateMemoryProps(c.id, title, words, bits, idx < comps.length - 1);
       });
       this.state.commit();
     };
 
+    titleInput.addEventListener('change', update);
     wordsInput.addEventListener('change', update);
     bitsInput.addEventListener('change', update);
     

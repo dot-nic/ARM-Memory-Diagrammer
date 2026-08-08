@@ -42,7 +42,13 @@ export class ComponentRenderer {
     const components = this.state.getComponents();
     const selectedIds = this.state.getSelectedComponentIds();
 
-    components.forEach(comp => {
+    // Render annotations (shapes and text) first so they are below others
+    components.filter(c => c.type === 'shape' || c.type === 'text').forEach(comp => {
+      this.drawComponent(comp, selectedIds.includes(comp.id));
+    });
+
+    // Render logic components on top
+    components.filter(c => c.type !== 'shape' && c.type !== 'text').forEach(comp => {
       this.drawComponent(comp, selectedIds.includes(comp.id));
     });
   }
@@ -63,16 +69,27 @@ export class ComponentRenderer {
     }
 
     // Draw main body
-    this.ctx.fillStyle = this.colors.bg;
-    this.ctx.strokeStyle = isSelected ? this.colors.borderSelected : (comp.color || this.colors.border);
+    if (comp.type === 'shape') {
+      const shape = comp as any;
+      this.ctx.fillStyle = shape.fillColor && shape.fillColor !== 'transparent' ? shape.fillColor : 'rgba(0,0,0,0)';
+    } else if (comp.type === 'text') {
+      this.ctx.fillStyle = 'rgba(0,0,0,0)';
+    } else {
+      this.ctx.fillStyle = this.colors.bg;
+    }
+    
+    this.ctx.strokeStyle = isSelected ? this.colors.borderSelected : (comp.color && comp.color !== 'transparent' ? comp.color : (comp.type === 'text' ? 'rgba(0,0,0,0)' : this.colors.border));
     this.ctx.lineWidth = isSelected ? 2 : 1;
     
     // Rounded rectangle
-    const radius = 8;
+    const radius = comp.type === 'shape' ? 0 : 8;
     this.ctx.beginPath();
     this.ctx.roundRect(0, 0, comp.width, comp.height, radius);
     this.ctx.fill();
-    this.ctx.stroke();
+    
+    if (comp.type !== 'text' || isSelected || (comp.color && comp.color !== 'transparent')) {
+      this.ctx.stroke();
+    }
 
     // Reset shadow for inner elements
     this.ctx.shadowColor = 'transparent';
@@ -85,14 +102,26 @@ export class ComponentRenderer {
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
 
-    if (comp.type === 'memory') {
+    if (comp.type === 'text') {
+      const txtComp = comp as any;
+      this.ctx.font = `${txtComp.fontSize || 14}px Inter, sans-serif`;
+      const lines = (txtComp.text || '').split('\n');
+      const lineHeight = (txtComp.fontSize || 14) * 1.2;
+      const totalHeight = lines.length * lineHeight;
+      let startY = (comp.height - totalHeight) / 2 + lineHeight / 2;
+      
+      lines.forEach((line: string) => {
+        this.ctx.fillText(line, comp.width / 2, startY);
+        startY += lineHeight;
+      });
+    } else if (comp.type === 'memory') {
       const mem = comp as MemoryComponent;
       const label = `${mem.wordsStr} x ${mem.bits} bits`;
       this.ctx.fillText(label, comp.width / 2, comp.height / 2);
       
       this.ctx.fillStyle = this.colors.textSecondary;
       this.ctx.font = '10px Inter, sans-serif';
-      this.ctx.fillText('RAM', comp.width / 2, 16);
+      this.ctx.fillText(mem.title || 'RAM', comp.width / 2, 16);
     } else if (comp.type === 'decoder') {
       const dec = comp as DecoderComponent;
       const label = `${dec.inputs}x${dec.outputs}`;
@@ -102,6 +131,18 @@ export class ComponentRenderer {
     } else if (comp.type === 'source') {
       this.ctx.font = 'bold 16px Inter, sans-serif';
       this.ctx.fillText(comp.title, comp.width / 2, comp.height / 2);
+    }
+
+    const isHovered = this.state.getHoveredComponentId() === comp.id;
+
+    if (comp.locked) {
+      this.ctx.fillStyle = this.colors.textSecondary;
+      this.ctx.font = '12px sans-serif';
+      this.ctx.fillText('🔒', comp.width - 12, 12);
+    } else if (isHovered) {
+      this.ctx.fillStyle = this.colors.textSecondary;
+      this.ctx.font = '12px sans-serif';
+      this.ctx.fillText('🔓', comp.width - 12, 12);
     }
 
     // Draw pins
@@ -128,6 +169,12 @@ export class ComponentRenderer {
       drawHandle(comp.width / 2, comp.height + 4); // bottom
       drawHandle(-4, comp.height / 2); // left
       drawHandle(comp.width + 4, comp.height / 2); // right
+      
+      // Corner handles
+      drawHandle(-4, -4); // top-left
+      drawHandle(comp.width + 4, -4); // top-right
+      drawHandle(-4, comp.height + 4); // bottom-left
+      drawHandle(comp.width + 4, comp.height + 4); // bottom-right
     }
 
     this.ctx.restore();

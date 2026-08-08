@@ -9,9 +9,11 @@ export class DiagramState {
   private selectedComponentIds: string[] = [];
   private selectedConnectionIds: string[] = [];
   private listeners: Set<Listener> = new Set();
-  
+
   private history: string[] = [];
   private historyIndex: number = -1;
+
+  private hoveredComponentId: string | null = null;
 
   constructor() {
     this.commit(); // Initial empty state
@@ -114,6 +116,17 @@ export class DiagramState {
     this.notify();
   }
 
+  public getHoveredComponentId(): string | null {
+    return this.hoveredComponentId;
+  }
+
+  public setHoveredComponentId(id: string | null, suppressNotify: boolean = false) {
+    if (this.hoveredComponentId !== id) {
+      this.hoveredComponentId = id;
+      if (!suppressNotify) this.notify();
+    }
+  }
+
   public updateComponentPosition(id: string, x: number, y: number) {
     const component = this.components.find(c => c.id === id);
     if (component) {
@@ -173,9 +186,10 @@ export class DiagramState {
     if (!suppressNotify) this.notify();
   }
 
-  public updateMemoryProps(id: string, wordsStr: string, bits: number, suppressNotify: boolean = false) {
+  public updateMemoryProps(id: string, title: string, wordsStr: string, bits: number, suppressNotify: boolean = false) {
     const component = this.components.find(c => c.id === id && c.type === 'memory') as MemoryComponent;
     if (component) {
+      component.title = title;
       component.wordsStr = wordsStr;
       component.bits = bits;
       if (!suppressNotify) this.notify();
@@ -250,6 +264,31 @@ export class DiagramState {
     }
   }
 
+  public setComponentLock(id: string, locked: boolean, suppressNotify: boolean = false) {
+    const comp = this.components.find(c => c.id === id);
+    if (comp) {
+      comp.locked = locked;
+      if (!suppressNotify) this.notify();
+    }
+  }
+
+  public updateTextProps(id: string, text: string, fontSize: number, suppressNotify: boolean = false) {
+    const component = this.components.find(c => c.id === id && c.type === 'text') as any;
+    if (component) {
+      component.text = text;
+      component.fontSize = fontSize;
+      if (!suppressNotify) this.notify();
+    }
+  }
+
+  public updateShapeProps(id: string, fillColor: string, suppressNotify: boolean = false) {
+    const component = this.components.find(c => c.id === id && c.type === 'shape') as any;
+    if (component) {
+      component.fillColor = fillColor;
+      if (!suppressNotify) this.notify();
+    }
+  }
+
   public togglePinActiveLow(componentId: string, pinId: string, suppressNotify: boolean = false) {
     const component = this.components.find(c => c.id === componentId);
     if (component) {
@@ -295,18 +334,23 @@ export class DiagramState {
     const connectionsToDelete = new Set<string>(this.selectedConnectionIds);
 
     if (this.selectedComponentIds.length > 0) {
-      this.components = this.components.filter(c => !this.selectedComponentIds.includes(c.id));
+      const componentsToDelete = this.selectedComponentIds.filter(id => {
+        const comp = this.components.find(c => c.id === id);
+        return comp && !comp.locked;
+      });
+
+      this.components = this.components.filter(c => !componentsToDelete.includes(c.id));
 
       this.connections.forEach(c => {
-        if (c.source.type === 'pin' && this.selectedComponentIds.includes(c.source.componentId)) {
+        if (c.source.type === 'pin' && componentsToDelete.includes(c.source.componentId)) {
           connectionsToDelete.add(c.id);
         }
-        if (c.target.type === 'pin' && this.selectedComponentIds.includes(c.target.componentId)) {
+        if (c.target.type === 'pin' && componentsToDelete.includes(c.target.componentId)) {
           connectionsToDelete.add(c.id);
         }
       });
 
-      this.selectedComponentIds = [];
+      this.selectedComponentIds = this.selectedComponentIds.filter(id => !componentsToDelete.includes(id));
     }
 
     if (connectionsToDelete.size > 0) {
@@ -319,7 +363,7 @@ export class DiagramState {
         this.connections.forEach(c => {
           if (connectionsToDelete.has(c.id)) {
             if (c.isSubBus) return;
-            
+
             if (c.source.type === 'joint' && !jointsToDelete.has(c.source.jointId)) {
               jointsToDelete.add(c.source.jointId);
               added = true;
@@ -334,7 +378,7 @@ export class DiagramState {
         this.connections.forEach(c => {
           if (!connectionsToDelete.has(c.id)) {
             if ((c.source.type === 'joint' && jointsToDelete.has(c.source.jointId)) ||
-                (c.target.type === 'joint' && jointsToDelete.has(c.target.jointId))) {
+              (c.target.type === 'joint' && jointsToDelete.has(c.target.jointId))) {
               connectionsToDelete.add(c.id);
               added = true;
             }
@@ -354,11 +398,11 @@ export class DiagramState {
 
   private cleanOrphanedJoints() {
     let changed = true;
-    while(changed) {
+    while (changed) {
       changed = false;
       const jointConnectionCount = new Map<string, number>();
       this.joints.forEach(j => jointConnectionCount.set(j.id, 0));
-      
+
       this.connections.forEach(c => {
         if (c.source.type === 'joint') {
           jointConnectionCount.set(c.source.jointId, (jointConnectionCount.get(c.source.jointId) || 0) + 1);
@@ -367,7 +411,7 @@ export class DiagramState {
           jointConnectionCount.set(c.target.jointId, (jointConnectionCount.get(c.target.jointId) || 0) + 1);
         }
       });
-      
+
       const jointsToRemove = new Set<string>();
       jointConnectionCount.forEach((count, id) => {
         // If a joint has 0 or 1 connection, it's dangling/orphaned.
@@ -376,13 +420,13 @@ export class DiagramState {
           changed = true;
         }
       });
-      
+
       if (jointsToRemove.size > 0) {
         this.joints = this.joints.filter(j => !jointsToRemove.has(j.id));
         this.connections = this.connections.filter(c => {
-           const sDel = c.source.type === 'joint' && jointsToRemove.has(c.source.jointId);
-           const tDel = c.target.type === 'joint' && jointsToRemove.has(c.target.jointId);
-           return !sDel && !tDel;
+          const sDel = c.source.type === 'joint' && jointsToRemove.has(c.source.jointId);
+          const tDel = c.target.type === 'joint' && jointsToRemove.has(c.target.jointId);
+          return !sDel && !tDel;
         });
       }
     }

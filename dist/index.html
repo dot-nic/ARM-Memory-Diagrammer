@@ -1,78 +1,105 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ARM Memory Diagrammer</title>
-    <!-- Use Google Fonts for modern typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-BCPBauhY.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-bxFfWrA_.css">
-  </head>
-  <body>
-    <div id="app">
-      <aside id="sidebar">
-        <div class="sidebar-header">
-          <h2>Componentes</h2>
-        </div>
-        <div class="toolbox">
-          <!-- Memorias -->
-          <div class="toolbox-section">
-            <h3>Memorias</h3>
-            <div class="toolbox-item" draggable="true" data-type="memory">
-              <div class="toolbox-icon memory-icon"></div>
-              <span>Memoria</span>
-            </div>
-          </div>
-          <!-- Decodificadores -->
-          <div class="toolbox-section">
-            <h3>Decodificadores</h3>
-            <div class="toolbox-item" draggable="true" data-type="decoder">
-              <div class="toolbox-icon decoder-icon"></div>
-              <span>Decodificador</span>
-            </div>
-          </div>
-          <!-- Otros -->
-          <div class="toolbox-section">
-            <h3>Otros</h3>
-            <div class="toolbox-item" draggable="true" data-type="source">
-              <div class="toolbox-icon">A</div>
-              <span>Bus Origin</span>
-            </div>
-          </div>
-        </div>
-      </aside>
-      <main id="canvas-container">
-        <!-- Top Toolbar -->
-        <div id="top-toolbar">
-          <input type="text" id="input-filename" value="diagrama-arm" title="Nombre del archivo" />
-          <button id="btn-save" title="Guardar Proyecto">💾 Guardar JSON</button>
-          <button id="btn-load" title="Cargar Proyecto">📂 Cargar JSON</button>
-          <button id="btn-export" title="Exportar PNG">🖼️ Exportar PNG</button>
-          <input type="file" id="file-load-input" accept=".json" style="display: none;" />
-        </div>
 
-        <button id="btn-theme" title="Cambiar a Modo Claro">☀️</button>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARM Memory Diagrammer</title>
+  <meta property="og:title" content="ARM Memory Diagrammer" />
+  <meta property="og:description" content="Una herramienta web interactiva para diseñar diagramas de memoria y arquitecturas ARM." />
+  <meta property="og:image" content="/cap_ARM_Memory_Diagram.png" />
+  
+  <link rel="icon" type="image/png" href="/icon.png" />
+  
+  <!-- Use Google Fonts for modern typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/index-Crmywxpw.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-Bx0wOmSR.css">
+</head>
 
-        <canvas id="main-canvas"></canvas>
-        <div id="zoom-controls">
-          <button id="btn-zoom-in" title="Zoom In">+</button>
-          <button id="btn-zoom-out" title="Zoom Out">-</button>
-          <button id="btn-zoom-reset" title="Reset Zoom">O</button>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h2>Componentes</h2>
+      </div>
+      <div class="toolbox">
+        <!-- Memorias -->
+        <div class="toolbox-section">
+          <h3>Memorias</h3>
+          <div class="toolbox-item" draggable="true" data-type="memory">
+            <div class="toolbox-icon memory-icon"></div>
+            <span>Memoria</span>
+          </div>
         </div>
-      </main>
-      
-      <!-- Properties Sidebar -->
-      <aside id="properties-sidebar" class="hidden">
-        <div class="sidebar-header">
-          <h2>Propiedades</h2>
+        <!-- Decodificadores -->
+        <div class="toolbox-section">
+          <h3>Decodificadores</h3>
+          <div class="toolbox-item" draggable="true" data-type="decoder">
+            <div class="toolbox-icon decoder-icon"></div>
+            <span>Decodificador</span>
+          </div>
         </div>
-        <div id="properties-content" class="toolbox">
-          <!-- Dynamically populated by PropertiesPanel -->
+        <!-- Otros -->
+        <div class="toolbox-section">
+          <h3>Otros</h3>
+          <div class="toolbox-item" draggable="true" data-type="source">
+            <div class="toolbox-icon">A</div>
+            <span>Bus Origin</span>
+          </div>
         </div>
-      </aside>
-    </div>
-  </body>
+        <!-- Anotaciones -->
+        <div class="toolbox-section">
+          <h3>Anotaciones</h3>
+          <div class="toolbox-item" draggable="true" data-type="text">
+            <div class="toolbox-icon text-icon">T</div>
+            <span>Texto</span>
+          </div>
+          <div class="toolbox-item" draggable="true" data-type="shape">
+            <div class="toolbox-icon shape-icon"></div>
+            <span>Forma</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <main id="canvas-container">
+      <!-- Top Toolbar -->
+      <div id="top-toolbar">
+        <input type="text" id="input-filename" value="diagrama-arm" title="Nombre del archivo" />
+        <button id="btn-save" title="Guardar Proyecto" class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        </button>
+        <button id="btn-load" title="Cargar Proyecto" class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        </button>
+        <button id="btn-export" title="Exportar PNG" class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+        </button>
+        <input type="file" id="file-load-input" accept=".json" style="display: none;" />
+      </div>
+
+      <button id="btn-theme" title="Cambiar a Modo Claro">☀️</button>
+
+      <canvas id="main-canvas"></canvas>
+      <div id="zoom-controls">
+        <button id="btn-zoom-in" title="Zoom In">+</button>
+        <button id="btn-zoom-out" title="Zoom Out">-</button>
+        <button id="btn-zoom-reset" title="Reset Zoom">O</button>
+      </div>
+    </main>
+
+    <!-- Properties Sidebar -->
+    <aside id="properties-sidebar" class="hidden">
+      <div class="sidebar-header">
+        <h2>Propiedades</h2>
+      </div>
+      <div id="properties-content" class="toolbox">
+        <!-- Dynamically populated by PropertiesPanel -->
+      </div>
+    </aside>
+  </div>
+</body>
+
 </html>

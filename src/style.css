@@ -104,45 +104,68 @@ body {
 .toolbox-item {
   display: flex;
   align-items: center;
-  padding: 12px;
-  background-color: var(--bg-primary);
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: grab;
-  transition: all 0.2s ease;
-  margin-bottom: 10px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .toolbox-item:hover {
   border-color: var(--accent-primary);
-  box-shadow: var(--shadow-glow);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow), 0 6px 16px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px) scale(1.02);
+  background-color: var(--bg-primary);
 }
 
 .toolbox-item:active {
   cursor: grabbing;
+  transform: translateY(0) scale(0.98);
 }
 
 .toolbox-icon {
-  width: 24px;
-  height: 24px;
-  margin-right: 12px;
-  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  margin-right: 14px;
+  border-radius: 6px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15);
 }
 
 .memory-icon {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border-color: #1d4ed8;
 }
 
 .decoder-icon {
   background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  border-color: #047857;
+}
+
+.text-icon {
+  background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);
+  border-color: #7e22ce;
+}
+
+.shape-icon {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-color: #d97706;
 }
 
 .toolbox-item span {
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 500;
+  color: var(--text-primary);
 }
 
 /* Canvas Container */
@@ -388,18 +411,18 @@ input:checked + .toggle-slider:before {
 /* Top Toolbar */
 #top-toolbar {
   position: absolute;
-  top: 16px;
+  top: 20px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   background: var(--bg-sidebar);
-  backdrop-filter: blur(12px);
-  padding: 6px 12px;
-  border-radius: 8px;
+  backdrop-filter: blur(16px);
+  padding: 8px 16px;
+  border-radius: 16px;
   border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), 0 8px 32px rgba(0, 0, 0, 0.2);
   z-index: 20;
 }
 

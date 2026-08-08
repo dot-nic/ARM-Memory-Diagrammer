@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARM Memory Diagrammer</title>
+    <!-- Use Google Fonts for modern typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/assets/index-BCPBauhY.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bxFfWrA_.css">
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div class="sidebar-header">
+          <h2>Componentes</h2>
+        </div>
+        <div class="toolbox">
+          <!-- Memorias -->
+          <div class="toolbox-section">
+            <h3>Memorias</h3>
+            <div class="toolbox-item" draggable="true" data-type="memory">
+              <div class="toolbox-icon memory-icon"></div>
+              <span>Memoria</span>
+            </div>
+          </div>
+          <!-- Decodificadores -->
+          <div class="toolbox-section">
+            <h3>Decodificadores</h3>
+            <div class="toolbox-item" draggable="true" data-type="decoder">
+              <div class="toolbox-icon decoder-icon"></div>
+              <span>Decodificador</span>
+            </div>
+          </div>
+          <!-- Otros -->
+          <div class="toolbox-section">
+            <h3>Otros</h3>
+            <div class="toolbox-item" draggable="true" data-type="source">
+              <div class="toolbox-icon">A</div>
+              <span>Bus Origin</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <main id="canvas-container">
+        <!-- Top Toolbar -->
+        <div id="top-toolbar">
+          <input type="text" id="input-filename" value="diagrama-arm" title="Nombre del archivo" />
+          <button id="btn-save" title="Guardar Proyecto">💾 Guardar JSON</button>
+          <button id="btn-load" title="Cargar Proyecto">📂 Cargar JSON</button>
+          <button id="btn-export" title="Exportar PNG">🖼️ Exportar PNG</button>
+          <input type="file" id="file-load-input" accept=".json" style="display: none;" />
+        </div>
+
+        <button id="btn-theme" title="Cambiar a Modo Claro">☀️</button>
+
+        <canvas id="main-canvas"></canvas>
+        <div id="zoom-controls">
+          <button id="btn-zoom-in" title="Zoom In">+</button>
+          <button id="btn-zoom-out" title="Zoom Out">-</button>
+          <button id="btn-zoom-reset" title="Reset Zoom">O</button>
+        </div>
+      </main>
+      
+      <!-- Properties Sidebar -->
+      <aside id="properties-sidebar" class="hidden">
+        <div class="sidebar-header">
+          <h2>Propiedades</h2>
+        </div>
+        <div id="properties-content" class="toolbox">
+          <!-- Dynamically populated by PropertiesPanel -->
+        </div>
+      </aside>
+    </div>
+  </body>
+</html>

@@ -86,20 +86,39 @@ const btnTheme = document.getElementById('btn-theme');
 const fileInput = document.getElementById('file-load-input') as HTMLInputElement;
 const filenameInput = document.getElementById('input-filename') as HTMLInputElement;
 
+// Load theme from localStorage
+const savedTheme = localStorage.getItem('diagramTheme');
+if (savedTheme === 'light-theme') {
+  document.body.classList.add('light-theme');
+  if (btnTheme) {
+    btnTheme.innerText = '🌙';
+    btnTheme.title = 'Cambiar a Tema Azul';
+  }
+} else if (savedTheme === 'blue-theme') {
+  document.body.classList.add('blue-theme');
+  if (btnTheme) {
+    btnTheme.innerText = '💧';
+    btnTheme.title = 'Cambiar a Modo Oscuro (Zinc)';
+  }
+}
+
 btnTheme?.addEventListener('click', () => {
   if (document.body.classList.contains('light-theme')) {
     document.body.classList.remove('light-theme');
     document.body.classList.add('blue-theme');
     btnTheme.innerText = '💧';
     btnTheme.title = 'Cambiar a Modo Oscuro (Zinc)';
+    localStorage.setItem('diagramTheme', 'blue-theme');
   } else if (document.body.classList.contains('blue-theme')) {
     document.body.classList.remove('blue-theme');
     btnTheme.innerText = '☀️';
     btnTheme.title = 'Cambiar a Modo Claro';
+    localStorage.setItem('diagramTheme', 'dark-theme');
   } else {
     document.body.classList.add('light-theme');
     btnTheme.innerText = '🌙';
     btnTheme.title = 'Cambiar a Tema Azul';
+    localStorage.setItem('diagramTheme', 'light-theme');
   }
   canvasManager.render();
 });

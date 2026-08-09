@@ -75,6 +75,9 @@
         <button id="btn-export" title="Exportar PNG" class="icon-btn">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
         </button>
+        <button id="btn-help" title="Atajos de teclado e interacciones" class="icon-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        </button>
         <input type="file" id="file-load-input" accept=".json" style="display: none;" />
       </div>
 
@@ -97,6 +100,44 @@
         <!-- Dynamically populated by PropertiesPanel -->
       </div>
     </aside>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Atajos e Interacciones</h2>
+          <button id="btn-close-help" class="icon-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="help-section">
+            <h3>Ratón y Selección</h3>
+            <ul>
+              <li><strong>Arrastrar componente:</strong> Mueve el componente y sus conexiones.</li>
+              <li><strong>Shift + Arrastrar fondo:</strong> Selección múltiple con caja.</li>
+              <li><strong>Arrastrar pines:</strong> Crea nuevas conexiones (buses).</li>
+              <li><strong>Arrastrar desde el medio de un bus:</strong> Crea una derivación (sub-bus).</li>
+              <li><strong>Shift + soltar al derivar:</strong> Crea una derivación dividiendo el bus original.</li>
+              <li><strong>Arrastrar nodos (blancos):</strong> Modifica la posición de las esquinas o derivaciones.</li>
+              <li><strong>Arrastrar línea de un bus:</strong> Desplaza el segmento entero.</li>
+              <li><strong>Arrastrar label/width:</strong> Mueve las etiquetas sobre la línea de conexión.</li>
+              <li><strong>Doble clic en pin:</strong> Alterna su tipo (activo bajo / normal).</li>
+              <li><strong>Click en el candado:</strong> Bloquea/Desbloquea el componente para evitar moverlo o borrarlo accidentalmente.</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h3>Teclado</h3>
+            <ul>
+              <li><strong>Supr / Retroceso:</strong> Elimina los elementos seleccionados.</li>
+              <li><strong>Ctrl/Cmd + Z:</strong> Deshace la última acción.</li>
+              <li><strong>Ctrl/Cmd + Shift + Z / Ctrl/Cmd + Y:</strong> Rehace la acción deshecha.</li>
+              <li><strong>Ctrl/Cmd + V:</strong> Duplica los componentes seleccionados (Clone).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>

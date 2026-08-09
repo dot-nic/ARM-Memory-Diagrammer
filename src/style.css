@@ -1,39 +1,62 @@
 :root {
-  /* Premium Dark Theme Palette */
-  --bg-primary: #0f1115;
-  --bg-secondary: #1a1d24;
-  --bg-sidebar: rgba(26, 29, 36, 0.85);
-  
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  
-  --accent-primary: #3b82f6;
-  --accent-hover: #2563eb;
-  
-  --border-color: #2d3748;
-  
+  /* Shadcn UI Zinc Dark Theme */
+  --bg-primary: #09090b;
+  --bg-secondary: #27272a;
+  --bg-sidebar: #09090b;
+
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+
+  --accent-primary: #fafafa;
+  --accent-hover: #e4e4e7;
+
+  --border-color: #27272a;
+
   --grid-line: rgba(255, 255, 255, 0.05);
   --grid-line-thick: rgba(255, 255, 255, 0.1);
   
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --radius: 0.5rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-glow: 0 0 15px rgba(59, 130, 246, 0.5);
 
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 body.light-theme {
+  /* Shadcn UI Zinc Light Theme */
   --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-sidebar: rgba(248, 250, 252, 0.85);
-  
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  
-  --border-color: #e2e8f0;
-  
+  --bg-secondary: #f4f4f5;
+  --bg-sidebar: #ffffff;
+
+  --text-primary: #09090b;
+  --text-secondary: #71717a;
+
+  --accent-primary: #18181b;
+  --accent-hover: #27272a;
+
+  --border-color: #e4e4e7;
+
   --grid-line: rgba(0, 0, 0, 0.05);
   --grid-line-thick: rgba(0, 0, 0, 0.1);
+}
+
+body.blue-theme {
+  /* Premium Dark Theme Palette (Azul) */
+  --bg-primary: #0f1115;
+  --bg-secondary: #1a1d24;
+  --bg-sidebar: #1a1d24;
+
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+
+  --border-color: #2d3748;
+
+  --grid-line: rgba(255, 255, 255, 0.05);
+  --grid-line-thick: rgba(255, 255, 255, 0.1);
 }
 
 * {
@@ -398,12 +421,12 @@ body {
   border-radius: 50%;
 }
 
-input:checked + .toggle-slider {
+input:checked+.toggle-slider {
   background-color: var(--accent-primary);
   border-color: var(--accent-primary);
 }
 
-input:checked + .toggle-slider:before {
+input:checked+.toggle-slider:before {
   transform: translateX(18px);
   background-color: white;
 }
@@ -440,7 +463,8 @@ input:checked + .toggle-slider:before {
   transition: all 0.2s ease;
 }
 
-#input-filename:hover, #input-filename:focus {
+#input-filename:hover,
+#input-filename:focus {
   background: var(--bg-primary);
   border-color: var(--border-color);
 }
@@ -500,4 +524,139 @@ input:checked + .toggle-slider:before {
 
 #btn-theme:active {
   transform: scale(0.95);
+}
+
+/* Modal */
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: opacity 0.2s ease;
+}
+
+.modal-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-content {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: var(--shadow-md), 0 10px 40px rgba(0, 0, 0, 0.4);
+  transform: translateY(0);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal-overlay.hidden .modal-content {
+  transform: translateY(20px) scale(0.95);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-header .icon-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.modal-header .icon-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.help-section {
+  margin-bottom: 24px;
+}
+
+.help-section:last-child {
+  margin-bottom: 0;
+}
+
+.help-section h3 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.help-section ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.help-section li {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.help-section li strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 8px;
+  border: 2px solid var(--bg-sidebar);
+  /* Adds a small margin around the thumb */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }

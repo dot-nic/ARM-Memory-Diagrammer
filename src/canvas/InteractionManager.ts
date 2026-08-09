@@ -13,6 +13,7 @@ export class InteractionManager {
   private draggingComponentId: string | null = null;
   private dragStartPositions: Map<string, Point> = new Map();
   private dragStartWaypoints: Map<string, Point[]> = new Map();
+  private dragStartJointPositions: Map<string, Point> = new Map();
 
   // Hover Connection State
   private hoveredConnection: Connection | null = null;
@@ -498,10 +499,10 @@ export class InteractionManager {
     // 2. Try to hit a component to drag it
     const hitComponent = this.hitTestComponent(worldPos);
     if (hitComponent) {
-      this.state.setSelectedConnectionIds([]);
       let selectedIds = this.state.getSelectedComponentIds();
-      // If we clicked on an unselected component, select only it
+      // If we clicked on an unselected component, select only it and clear connections
       if (!selectedIds.includes(hitComponent.id)) {
+        this.state.setSelectedConnectionIds([]);
         this.state.setSelectedComponentIds([hitComponent.id]);
         selectedIds = [hitComponent.id];
       }
@@ -522,17 +523,34 @@ export class InteractionManager {
       // Save starting positions for all selected components
       this.dragStartPositions.clear();
       this.dragStartWaypoints.clear();
+      this.dragStartJointPositions.clear();
       this.state.getComponents().forEach(c => {
         if (selectedIds.includes(c.id)) {
           this.dragStartPositions.set(c.id, { x: c.x, y: c.y });
         }
       });
       // Find all connections that attach to these components
+      const selectedConnectionIds = this.state.getSelectedConnectionIds();
       this.state.getConnections().forEach(conn => {
         const sourceHit = conn.source.type === 'pin' && selectedIds.includes(conn.source.componentId);
         const targetHit = conn.target.type === 'pin' && selectedIds.includes(conn.target.componentId);
-        if ((sourceHit || targetHit) && conn.waypoints && conn.waypoints.length > 0) {
-          this.dragStartWaypoints.set(conn.id, conn.waypoints.map(w => ({ ...w })));
+        
+        if (sourceHit || targetHit) {
+          const isBusOrSubBus = (conn.busWidth && conn.busWidth > 1) || conn.isSubBus;
+          if (!isBusOrSubBus || selectedConnectionIds.includes(conn.id)) {
+            if (conn.waypoints && conn.waypoints.length > 0) {
+              this.dragStartWaypoints.set(conn.id, conn.waypoints.map(w => ({ ...w })));
+            }
+            if (conn.isSubBus) {
+              const jointTarget = conn.source.type === 'joint' ? conn.source : (conn.target.type === 'joint' ? conn.target : null);
+              if (jointTarget) {
+                const joint = this.state.getJoints().find(j => j.id === jointTarget.jointId);
+                if (joint) {
+                  this.dragStartJointPositions.set(joint.id, { x: joint.x, y: joint.y });
+                }
+              }
+            }
+          }
         }
       });
 
@@ -645,13 +663,24 @@ export class InteractionManager {
       if (hitSegment && !this.state.getSelectedConnectionIds().includes(hitSegment.connection.id)) {
         this.hoveredConnection = hitSegment.connection;
         const path = this.getComputedPath(hitSegment.connection);
-        const p1 = path[hitSegment.segmentIndex];
-        const p2 = path[hitSegment.segmentIndex + 1];
+        
+        let snappedToCorner = false;
+        for (let i = 1; i < path.length - 1; i++) {
+          if (Math.hypot(worldPos.x - path[i].x, worldPos.y - path[i].y) < 15) {
+            this.hoveredConnectionPos = { x: path[i].x, y: path[i].y };
+            snappedToCorner = true;
+            break;
+          }
+        }
 
-        this.hoveredConnectionPos = {
-          x: (p1.x + p2.x) / 2,
-          y: (p1.y + p2.y) / 2
-        };
+        if (!snappedToCorner) {
+          const p1 = path[hitSegment.segmentIndex];
+          const p2 = path[hitSegment.segmentIndex + 1];
+          this.hoveredConnectionPos = {
+            x: (p1.x + p2.x) / 2,
+            y: (p1.y + p2.y) / 2
+          };
+        }
       } else {
         this.hoveredConnection = null;
         this.hoveredConnectionPos = null;
@@ -800,6 +829,21 @@ export class InteractionManager {
           conn.waypoints = originalWaypoints.map(w => ({ x: w.x + snappedDx, y: w.y + snappedDy }));
         }
       });
+
+      this.dragStartJointPositions.forEach((startPos, jointId) => {
+        const joint = this.state.getJoints().find(j => j.id === jointId);
+        if (joint) {
+          joint.x = startPos.x + snappedDx;
+          joint.y = startPos.y + snappedDy;
+          
+          this.state.getConnections().forEach(c => {
+            if (!c.isSubBus && ((c.source.type === 'joint' && c.source.jointId === joint.id) ||
+                (c.target.type === 'joint' && c.target.jointId === joint.id))) {
+              c.waypoints = [];
+            }
+          });
+        }
+      });
     }
   }
 
@@ -859,26 +903,52 @@ export class InteractionManager {
       if (targetPin) {
         if (this.pendingBranchConnection) {
           // We found a pin, so we finally execute the branch creation!
+          const parentConn = this.pendingBranchConnection.connection;
+          const pos = this.pendingBranchConnection.pos;
           const jointId = Math.random().toString(36).substring(2, 9);
+          
           this.state.addJoint({
             id: jointId,
-            x: this.pendingBranchConnection.pos.x,
-            y: this.pendingBranchConnection.pos.y
+            x: pos.x,
+            y: pos.y
           });
 
-          const parentConn = this.pendingBranchConnection.connection;
-          const oldTarget = parentConn.target;
-          parentConn.target = { type: 'joint', jointId };
+          if (e.shiftKey) {
+            let wp1: Point[] = [];
+            let wp2: Point[] = [];
 
-          this.state.addConnection({
-            id: Math.random().toString(36).substring(2, 9),
-            source: { type: 'joint', jointId },
-            target: oldTarget,
-            waypoints: [],
-            label: parentConn.label,
-            busWidth: parentConn.busWidth,
-            color: parentConn.color
-          });
+            if (parentConn.waypoints && parentConn.waypoints.length > 0) {
+              const path = this.getComputedPath(parentConn);
+              let splitIndex = -1;
+              for (let i = 0; i < path.length - 1; i++) {
+                if (this.pointToSegmentDist(pos, path[i], path[i + 1]) < 1) {
+                  splitIndex = i;
+                  break;
+                }
+              }
+              if (splitIndex !== -1) {
+                wp1 = path.slice(0, splitIndex + 1);
+                wp1.push({ x: pos.x, y: pos.y });
+
+                wp2 = [{ x: pos.x, y: pos.y }];
+                wp2.push(...path.slice(splitIndex + 1));
+              }
+            }
+
+            const oldTarget = parentConn.target;
+            parentConn.target = { type: 'joint', jointId };
+            if (wp1.length > 0) parentConn.waypoints = wp1;
+
+            this.state.addConnection({
+              id: Math.random().toString(36).substring(2, 9),
+              source: { type: 'joint', jointId },
+              target: oldTarget,
+              waypoints: wp2,
+              label: parentConn.label,
+              busWidth: parentConn.busWidth,
+              color: parentConn.color
+            });
+          }
 
           // Create the sub bus
           this.state.addConnection({
@@ -912,27 +982,50 @@ export class InteractionManager {
         const targetConnection = this.hitTestConnection(worldPos);
         if (targetConnection) {
           const jointId = Math.random().toString(36).substring(2, 9);
-
           this.state.addJoint({
             id: jointId,
             x: worldPos.x,
             y: worldPos.y
           });
 
-          // Redirect old connection target to joint
-          const oldTarget = targetConnection.target;
-          targetConnection.target = { type: 'joint', jointId };
+          if (e.shiftKey) {
+            let wp1: Point[] = [];
+            let wp2: Point[] = [];
 
-          // Create connection from joint to old target
-          this.state.addConnection({
-            id: Math.random().toString(36).substring(2, 9),
-            source: { type: 'joint', jointId },
-            target: oldTarget,
-            waypoints: [],
-            label: targetConnection.label,
-            busWidth: targetConnection.busWidth,
-            color: targetConnection.color
-          });
+            if (targetConnection.waypoints && targetConnection.waypoints.length > 0) {
+              const path = this.getComputedPath(targetConnection);
+              let splitIndex = -1;
+              for (let i = 0; i < path.length - 1; i++) {
+                if (this.pointToSegmentDist(worldPos, path[i], path[i + 1]) < 8) {
+                  splitIndex = i;
+                  break;
+                }
+              }
+              if (splitIndex !== -1) {
+                wp1 = path.slice(0, splitIndex + 1);
+                wp1.push({ x: worldPos.x, y: worldPos.y });
+
+                wp2 = [{ x: worldPos.x, y: worldPos.y }];
+                wp2.push(...path.slice(splitIndex + 1));
+              }
+            }
+
+            // Redirect old connection target to joint
+            const oldTarget = targetConnection.target;
+            targetConnection.target = { type: 'joint', jointId };
+            if (wp1.length > 0) targetConnection.waypoints = wp1;
+
+            // Create connection from joint to old target
+            this.state.addConnection({
+              id: Math.random().toString(36).substring(2, 9),
+              source: { type: 'joint', jointId },
+              target: oldTarget,
+              waypoints: wp2,
+              label: targetConnection.label,
+              busWidth: targetConnection.busWidth,
+              color: targetConnection.color
+            });
+          }
 
           // Create new connection from our source to joint
           this.state.addConnection({

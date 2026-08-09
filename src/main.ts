@@ -87,10 +87,20 @@ const fileInput = document.getElementById('file-load-input') as HTMLInputElement
 const filenameInput = document.getElementById('input-filename') as HTMLInputElement;
 
 btnTheme?.addEventListener('click', () => {
-  document.body.classList.toggle('light-theme');
-  const isLight = document.body.classList.contains('light-theme');
-  btnTheme.innerText = isLight ? '🌙' : '☀️';
-  btnTheme.title = isLight ? 'Cambiar a Modo Oscuro' : 'Cambiar a Modo Claro';
+  if (document.body.classList.contains('light-theme')) {
+    document.body.classList.remove('light-theme');
+    document.body.classList.add('blue-theme');
+    btnTheme.innerText = '💧';
+    btnTheme.title = 'Cambiar a Modo Oscuro (Zinc)';
+  } else if (document.body.classList.contains('blue-theme')) {
+    document.body.classList.remove('blue-theme');
+    btnTheme.innerText = '☀️';
+    btnTheme.title = 'Cambiar a Modo Claro';
+  } else {
+    document.body.classList.add('light-theme');
+    btnTheme.innerText = '🌙';
+    btnTheme.title = 'Cambiar a Tema Azul';
+  }
   canvasManager.render();
 });
 
@@ -271,3 +281,22 @@ canvasEl.addEventListener('drop', (e: DragEvent) => {
 
 // Initial render
 canvasManager.render();
+
+// Help Modal Logic
+const btnHelp = document.getElementById('btn-help');
+const helpModal = document.getElementById('help-modal');
+const btnCloseHelp = document.getElementById('btn-close-help');
+
+btnHelp?.addEventListener('click', () => {
+  helpModal?.classList.remove('hidden');
+});
+
+btnCloseHelp?.addEventListener('click', () => {
+  helpModal?.classList.add('hidden');
+});
+
+helpModal?.addEventListener('click', (e) => {
+  if (e.target === helpModal) {
+    helpModal.classList.add('hidden');
+  }
+});

@@ -413,6 +413,61 @@ export class DiagramState {
       });
 
       const jointsToRemove = new Set<string>();
+
+      // Handle joints with exactly 2 connections (merge them back)
+      for (const [id, count] of jointConnectionCount.entries()) {
+        if (count === 2) {
+          const conns = this.connections.filter(c => 
+            (c.source.type === 'joint' && c.source.jointId === id) || 
+            (c.target.type === 'joint' && c.target.jointId === id)
+          );
+          
+          if (conns.length === 2) {
+            let mainConn = conns[0];
+            let subConn = conns[1];
+            
+            // Prefer keeping the one that is NOT a subBus
+            if (conns[1].isSubBus === false || (!conns[1].isSubBus && conns[0].isSubBus)) {
+              mainConn = conns[1];
+              subConn = conns[0];
+            }
+
+            const joint = this.joints.find(j => j.id === id);
+            if (!joint) continue;
+
+            const mainConnectsAsTarget = mainConn.target.type === 'joint' && mainConn.target.jointId === id;
+            const subConnectsAsSource = subConn.source.type === 'joint' && subConn.source.jointId === id;
+            const subConnectsAsTarget = subConn.target.type === 'joint' && subConn.target.jointId === id;
+
+            if (mainConnectsAsTarget) {
+              if (subConnectsAsSource) {
+                mainConn.target = subConn.target;
+                mainConn.waypoints = [...(mainConn.waypoints || []), {x: joint.x, y: joint.y}, ...(subConn.waypoints || [])];
+              } else if (subConnectsAsTarget) {
+                mainConn.target = subConn.source;
+                mainConn.waypoints = [...(mainConn.waypoints || []), {x: joint.x, y: joint.y}, ...(subConn.waypoints ? [...subConn.waypoints].reverse() : [])];
+              }
+            } else {
+              if (subConnectsAsTarget) {
+                mainConn.source = subConn.source;
+                mainConn.waypoints = [...(subConn.waypoints || []), {x: joint.x, y: joint.y}, ...(mainConn.waypoints || [])];
+              } else if (subConnectsAsSource) {
+                mainConn.source = subConn.target;
+                mainConn.waypoints = [...(subConn.waypoints ? [...subConn.waypoints].reverse() : []), {x: joint.x, y: joint.y}, ...(mainConn.waypoints || [])];
+              }
+            }
+
+            // Remove the subConn and the joint
+            this.connections = this.connections.filter(c => c.id !== subConn.id);
+            this.joints = this.joints.filter(j => j.id !== id);
+            changed = true;
+            break; // Restart loop to handle cascading merges cleanly
+          }
+        }
+      }
+      
+      if (changed) continue;
+
       jointConnectionCount.forEach((count, id) => {
         // If a joint has 0 or 1 connection, it's dangling/orphaned.
         if (count <= 1) {

@@ -181,7 +181,7 @@ export class InteractionManager {
       const comp = components[i];
       const padX = comp.x + comp.width - 12;
       const padY = comp.y + 12;
-      
+
       if (Math.abs(worldPos.x - padX) < 12 && Math.abs(worldPos.y - padY) < 12) {
         if (comp.locked || this.state.getHoveredComponentId() === comp.id) {
           return comp;
@@ -421,7 +421,7 @@ export class InteractionManager {
     if (hitPadlock) {
       const newLockedState = !hitPadlock.locked;
       const selectedIds = this.state.getSelectedComponentIds();
-      
+
       if (selectedIds.includes(hitPadlock.id) && selectedIds.length > 1) {
         selectedIds.forEach(id => this.state.setComponentLock(id, newLockedState, true));
         this.state.commit();
@@ -482,12 +482,30 @@ export class InteractionManager {
       this.draggedJointId = hitJointId;
 
       let axis: 'x' | 'y' | null = null;
-      if (conns.length >= 2) {
-        const p1 = this.getTargetPosition(conns[0].source.type === 'joint' && conns[0].source.jointId === hitJointId ? conns[0].target : conns[0].source);
-        const p2 = this.getTargetPosition(conns[1].source.type === 'joint' && conns[1].source.jointId === hitJointId ? conns[1].target : conns[1].source);
-        if (p1 && p2) {
-          if (Math.abs(p1.y - p2.y) < 5) axis = 'x';
-          else if (Math.abs(p1.x - p2.x) < 5) axis = 'y';
+      const joint = this.state.getJoints().find(j => j.id === hitJointId);
+      
+      if (joint) {
+        for (let i = 0; i < conns.length; i++) {
+          for (let j = i + 1; j < conns.length; j++) {
+            const path1 = this.getComputedPath(conns[i]);
+            const path2 = this.getComputedPath(conns[j]);
+            
+            if (path1.length >= 2 && path2.length >= 2) {
+              const p1 = conns[i].target.type === 'joint' && conns[i].target.jointId === hitJointId 
+                  ? path1[path1.length - 2] : path1[1];
+              const p2 = conns[j].target.type === 'joint' && conns[j].target.jointId === hitJointId 
+                  ? path2[path2.length - 2] : path2[1];
+                  
+              if (Math.abs(p1.y - joint.y) < 5 && Math.abs(p2.y - joint.y) < 5) {
+                axis = 'x';
+                break;
+              } else if (Math.abs(p1.x - joint.x) < 5 && Math.abs(p2.x - joint.x) < 5) {
+                axis = 'y';
+                break;
+              }
+            }
+          }
+          if (axis) break;
         }
       }
       this.draggedJointAxis = axis;
@@ -534,7 +552,7 @@ export class InteractionManager {
       this.state.getConnections().forEach(conn => {
         const sourceHit = conn.source.type === 'pin' && selectedIds.includes(conn.source.componentId);
         const targetHit = conn.target.type === 'pin' && selectedIds.includes(conn.target.componentId);
-        
+
         if (sourceHit || targetHit) {
           const isBusOrSubBus = (conn.busWidth && conn.busWidth > 1) || conn.isSubBus;
           if (!isBusOrSubBus || selectedConnectionIds.includes(conn.id)) {
@@ -644,15 +662,6 @@ export class InteractionManager {
         joint.x = this.grid.snap(newX);
         joint.y = this.grid.snap(newY);
 
-        // Waypoints of connections connected to this joint might need to be cleared
-        // so they re-route properly.
-        this.state.getConnections().forEach(c => {
-          if ((c.source.type === 'joint' && c.source.jointId === joint.id) ||
-            (c.target.type === 'joint' && c.target.jointId === joint.id)) {
-            c.waypoints = [];
-          }
-        });
-
         this.canvasManager.render();
       }
       return;
@@ -663,7 +672,7 @@ export class InteractionManager {
       if (hitSegment && !this.state.getSelectedConnectionIds().includes(hitSegment.connection.id)) {
         this.hoveredConnection = hitSegment.connection;
         const path = this.getComputedPath(hitSegment.connection);
-        
+
         let snappedToCorner = false;
         for (let i = 1; i < path.length - 1; i++) {
           if (Math.hypot(worldPos.x - path[i].x, worldPos.y - path[i].y) < 15) {
@@ -685,10 +694,10 @@ export class InteractionManager {
         this.hoveredConnection = null;
         this.hoveredConnectionPos = null;
       }
-      
+
       const hitComponent = this.hitTestComponent(worldPos);
       this.state.setHoveredComponentId(hitComponent ? hitComponent.id : null);
-      
+
       this.canvasManager.render();
     }
 
@@ -835,10 +844,10 @@ export class InteractionManager {
         if (joint) {
           joint.x = startPos.x + snappedDx;
           joint.y = startPos.y + snappedDy;
-          
+
           this.state.getConnections().forEach(c => {
             if (!c.isSubBus && ((c.source.type === 'joint' && c.source.jointId === joint.id) ||
-                (c.target.type === 'joint' && c.target.jointId === joint.id))) {
+              (c.target.type === 'joint' && c.target.jointId === joint.id))) {
               c.waypoints = [];
             }
           });
@@ -905,34 +914,35 @@ export class InteractionManager {
           // We found a pin, so we finally execute the branch creation!
           const parentConn = this.pendingBranchConnection.connection;
           const pos = this.pendingBranchConnection.pos;
-          const jointId = Math.random().toString(36).substring(2, 9);
-          
+          let jointId = Math.random().toString(36).substring(2, 9);
           this.state.addJoint({
             id: jointId,
             x: pos.x,
             y: pos.y
           });
 
-          if (e.shiftKey) {
+          if (!e.shiftKey) {
+
+            // Always split the parent connection
             let wp1: Point[] = [];
             let wp2: Point[] = [];
 
-            if (parentConn.waypoints && parentConn.waypoints.length > 0) {
-              const path = this.getComputedPath(parentConn);
-              let splitIndex = -1;
-              for (let i = 0; i < path.length - 1; i++) {
-                if (this.pointToSegmentDist(pos, path[i], path[i + 1]) < 1) {
-                  splitIndex = i;
-                  break;
-                }
+            const path = this.getComputedPath(parentConn);
+            let splitIndex = -1;
+            for (let i = 0; i < path.length - 1; i++) {
+              if (this.pointToSegmentDist(pos, path[i], path[i + 1]) < 1) {
+                splitIndex = i;
+                break;
               }
-              if (splitIndex !== -1) {
-                wp1 = path.slice(0, splitIndex + 1);
-                wp1.push({ x: pos.x, y: pos.y });
+            }
+            if (splitIndex !== -1) {
+              wp1 = path.slice(0, splitIndex + 1);
+              wp1.push({ x: pos.x, y: pos.y });
+              while (wp1.length < 4) wp1.splice(1, 0, { ...wp1[1] });
 
-                wp2 = [{ x: pos.x, y: pos.y }];
-                wp2.push(...path.slice(splitIndex + 1));
-              }
+              wp2 = [{ x: pos.x, y: pos.y }];
+              wp2.push(...path.slice(splitIndex + 1));
+              while (wp2.length < 4) wp2.splice(1, 0, { ...wp2[1] });
             }
 
             const oldTarget = parentConn.target;
@@ -944,9 +954,8 @@ export class InteractionManager {
               source: { type: 'joint', jointId },
               target: oldTarget,
               waypoints: wp2,
-              label: parentConn.label,
-              busWidth: parentConn.busWidth,
-              color: parentConn.color
+              color: parentConn.color,
+              isSubBus: true
             });
           }
 
@@ -956,8 +965,6 @@ export class InteractionManager {
             source: { type: 'joint', jointId },
             target: { type: 'pin', componentId: targetPin.component.id, pinId: targetPin.pin.id },
             waypoints: [],
-            label: parentConn.label,
-            busWidth: parentConn.busWidth,
             color: parentConn.color,
             isSubBus: true
           });
@@ -987,27 +994,29 @@ export class InteractionManager {
             x: worldPos.x,
             y: worldPos.y
           });
+          
+          if (!e.shiftKey) {
 
-          if (e.shiftKey) {
+            // Always split the target connection
             let wp1: Point[] = [];
             let wp2: Point[] = [];
 
-            if (targetConnection.waypoints && targetConnection.waypoints.length > 0) {
-              const path = this.getComputedPath(targetConnection);
-              let splitIndex = -1;
-              for (let i = 0; i < path.length - 1; i++) {
-                if (this.pointToSegmentDist(worldPos, path[i], path[i + 1]) < 8) {
-                  splitIndex = i;
-                  break;
-                }
+            const path = this.getComputedPath(targetConnection);
+            let splitIndex = -1;
+            for (let i = 0; i < path.length - 1; i++) {
+              if (this.pointToSegmentDist(worldPos, path[i], path[i + 1]) < 8) {
+                splitIndex = i;
+                break;
               }
-              if (splitIndex !== -1) {
-                wp1 = path.slice(0, splitIndex + 1);
-                wp1.push({ x: worldPos.x, y: worldPos.y });
+            }
+            if (splitIndex !== -1) {
+              wp1 = path.slice(0, splitIndex + 1);
+              wp1.push({ x: worldPos.x, y: worldPos.y });
+              while (wp1.length < 4) wp1.splice(1, 0, { ...wp1[1] });
 
-                wp2 = [{ x: worldPos.x, y: worldPos.y }];
-                wp2.push(...path.slice(splitIndex + 1));
-              }
+              wp2 = [{ x: worldPos.x, y: worldPos.y }];
+              wp2.push(...path.slice(splitIndex + 1));
+              while (wp2.length < 4) wp2.splice(1, 0, { ...wp2[1] });
             }
 
             // Redirect old connection target to joint
@@ -1021,9 +1030,8 @@ export class InteractionManager {
               source: { type: 'joint', jointId },
               target: oldTarget,
               waypoints: wp2,
-              label: targetConnection.label,
-              busWidth: targetConnection.busWidth,
-              color: targetConnection.color
+              color: targetConnection.color,
+              isSubBus: true
             });
           }
 

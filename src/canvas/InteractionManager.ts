@@ -491,9 +491,9 @@ export class InteractionManager {
             const path2 = this.getComputedPath(conns[j]);
             
             if (path1.length >= 2 && path2.length >= 2) {
-              const p1 = conns[i].target.type === 'joint' && conns[i].target.jointId === hitJointId 
+              const p1 = conns[i].target.type === 'joint' && (conns[i].target as any).jointId === hitJointId 
                   ? path1[path1.length - 2] : path1[1];
-              const p2 = conns[j].target.type === 'joint' && conns[j].target.jointId === hitJointId 
+              const p2 = conns[j].target.type === 'joint' && (conns[j].target as any).jointId === hitJointId 
                   ? path2[path2.length - 2] : path2[1];
                   
               if (Math.abs(p1.y - joint.y) < 5 && Math.abs(p2.y - joint.y) < 5) {

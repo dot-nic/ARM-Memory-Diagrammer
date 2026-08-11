@@ -1,5 +1,5 @@
 import { DiagramState } from '../models/DiagramState';
-import { DiagramComponent, MemoryComponent, DecoderComponent, Pin } from '../models/types';
+import { DiagramComponent, MemoryComponent, DecoderComponent, LogicGateComponent, Pin } from '../models/types';
 
 export class ComponentRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -78,17 +78,20 @@ export class ComponentRenderer {
       this.ctx.fillStyle = this.colors.bg;
     }
     
-    this.ctx.strokeStyle = isSelected ? this.colors.borderSelected : (comp.color && comp.color !== 'transparent' ? comp.color : (comp.type === 'text' ? 'rgba(0,0,0,0)' : this.colors.border));
+    const defaultBorder = comp.type === 'logicGate' ? this.colors.textPrimary : this.colors.border;
+    this.ctx.strokeStyle = isSelected ? this.colors.borderSelected : (comp.color && comp.color !== 'transparent' ? comp.color : (comp.type === 'text' ? 'rgba(0,0,0,0)' : defaultBorder));
     this.ctx.lineWidth = isSelected ? 2 : 1;
     
-    // Rounded rectangle
     const radius = comp.type === 'shape' ? 0 : 8;
-    this.ctx.beginPath();
-    this.ctx.roundRect(0, 0, comp.width, comp.height, radius);
-    this.ctx.fill();
     
-    if (comp.type !== 'text' || isSelected || (comp.color && comp.color !== 'transparent')) {
-      this.ctx.stroke();
+    if (comp.type !== 'logicGate') {
+      this.ctx.beginPath();
+      this.ctx.roundRect(0, 0, comp.width, comp.height, radius);
+      this.ctx.fill();
+      
+      if (comp.type !== 'text' || isSelected || (comp.color && comp.color !== 'transparent')) {
+        this.ctx.stroke();
+      }
     }
 
     // Reset shadow for inner elements
@@ -128,6 +131,48 @@ export class ComponentRenderer {
       this.ctx.fillText(`Decodificador`, comp.width / 2, comp.height / 2 - 8);
       this.ctx.font = 'bold 12px Inter, sans-serif';
       this.ctx.fillText(label, comp.width / 2, comp.height / 2 + 8);
+    } else if (comp.type === 'logicGate') {
+      const gate = comp as LogicGateComponent;
+      
+      // Draw Logic Gate Shape
+      this.ctx.beginPath();
+      
+      if (gate.gateType === 'AND') {
+        this.ctx.moveTo(10, 0);
+        this.ctx.lineTo(comp.width / 2, 0);
+        this.ctx.arc(comp.width / 2, comp.height / 2, comp.height / 2, -Math.PI / 2, Math.PI / 2);
+        this.ctx.lineTo(10, comp.height);
+        this.ctx.closePath();
+      } else if (gate.gateType === 'OR' || gate.gateType === 'XOR') {
+        if (gate.gateType === 'XOR') {
+          // Draw the extra curve at the back for XOR
+          this.ctx.beginPath();
+          this.ctx.moveTo(5, 0);
+          this.ctx.quadraticCurveTo(comp.width * 0.3, comp.height / 2, 5, comp.height);
+          this.ctx.stroke();
+          this.ctx.beginPath(); // Start new path for main body
+        }
+        
+        this.ctx.moveTo(10, 0);
+        this.ctx.quadraticCurveTo(comp.width, 0, comp.width - 5, comp.height / 2);
+        this.ctx.quadraticCurveTo(comp.width, comp.height, 10, comp.height);
+        this.ctx.quadraticCurveTo(comp.width * 0.3 + 10, comp.height / 2, 10, 0);
+        this.ctx.closePath();
+      } else if (gate.gateType === 'NOT') {
+        this.ctx.moveTo(10, 10);
+        this.ctx.lineTo(comp.width - 10, comp.height / 2);
+        this.ctx.lineTo(10, comp.height - 10);
+        this.ctx.closePath();
+      }
+
+      this.ctx.fillStyle = this.colors.bg;
+      this.ctx.fill();
+      this.ctx.stroke();
+
+      this.ctx.fillStyle = this.colors.textSecondary;
+      this.ctx.font = '10px Inter, sans-serif';
+      // We don't necessarily need text, but we can put it
+      // this.ctx.fillText(gate.gateType, comp.width / 2, comp.height / 2);
     } else if (comp.type === 'source') {
       this.ctx.font = 'bold 16px Inter, sans-serif';
       this.ctx.fillText(comp.title, comp.width / 2, comp.height / 2);

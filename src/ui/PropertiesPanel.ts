@@ -1,5 +1,5 @@
 import { DiagramState } from '../models/DiagramState';
-import { MemoryComponent, DecoderComponent, Pin } from '../models/types';
+import { MemoryComponent, DecoderComponent, LogicGateComponent, LogicGateType, Pin } from '../models/types';
 
 export class PropertiesPanel {
   private state: DiagramState;
@@ -61,6 +61,7 @@ export class PropertiesPanel {
     const selectedMemories = selectedComponents.filter(c => c.type === 'memory') as MemoryComponent[];
     const selectedDecoders = selectedComponents.filter(c => c.type === 'decoder') as DecoderComponent[];
     const selectedSources = selectedComponents.filter(c => c.type === 'source');
+    const selectedLogicGates = selectedComponents.filter(c => c.type === 'logicGate') as LogicGateComponent[];
     const selectedTexts = selectedComponents.filter(c => c.type === 'text') as any[];
     const selectedShapes = selectedComponents.filter(c => c.type === 'shape') as any[];
 
@@ -118,6 +119,9 @@ export class PropertiesPanel {
     }
     if (selectedDecoders.length > 0) {
       this.renderDecoderProps(selectedDecoders);
+    }
+    if (selectedLogicGates.length > 0) {
+      this.renderLogicGateProps(selectedLogicGates);
     }
     if (selectedSources.length > 0) {
       this.renderSourceProps(selectedSources);
@@ -482,6 +486,91 @@ export class PropertiesPanel {
 
     inputsInput.addEventListener('change', update);
     outputsInput.addEventListener('change', update);
+    
+    this.addSeparator();
+  }
+
+  private renderLogicGateProps(comps: LogicGateComponent[]) {
+    this.addSectionTitle(`Compuertas Lógicas (${comps.length})`);
+    
+    const first = comps[0];
+    const sameType = comps.every(c => c.gateType === first.gateType) ? first.gateType : '';
+    const sameNegated = comps.every(c => c.negated === first.negated) ? first.negated : null;
+    const sameInputs = comps.every(c => c.inputs === first.inputs) ? first.inputs : '';
+
+    const isNotGate = sameType === 'NOT';
+
+    const typeGroup = document.createElement('div');
+    typeGroup.className = 'prop-group';
+    typeGroup.innerHTML = `
+      <label>Tipo de Compuerta</label>
+      <select class="prop-input gate-type">
+        <option value="" ${sameType === '' ? 'selected' : ''} disabled hidden>(Varios)</option>
+        <option value="AND" ${sameType === 'AND' ? 'selected' : ''}>AND</option>
+        <option value="OR" ${sameType === 'OR' ? 'selected' : ''}>OR</option>
+        <option value="XOR" ${sameType === 'XOR' ? 'selected' : ''}>XOR</option>
+        <option value="NOT" ${sameType === 'NOT' ? 'selected' : ''}>NOT</option>
+      </select>
+    `;
+    this.contentEl.appendChild(typeGroup);
+
+    const negatedGroup = document.createElement('div');
+    negatedGroup.className = 'prop-group toggle-row';
+    negatedGroup.style.display = isNotGate ? 'none' : 'flex';
+    negatedGroup.innerHTML = `
+      <span class="toggle-label">Negada (Salida)</span>
+      <label class="toggle-switch">
+        <input type="checkbox" class="gate-negated" ${sameNegated ? 'checked' : ''}>
+        <span class="toggle-slider"></span>
+      </label>
+    `;
+    this.contentEl.appendChild(negatedGroup);
+
+    const inputsGroup = document.createElement('div');
+    inputsGroup.className = 'prop-group';
+    inputsGroup.style.display = isNotGate ? 'none' : 'block';
+    inputsGroup.innerHTML = `
+      <label>Entradas (Inputs)</label>
+      <input type="number" class="prop-input gate-inputs" value="${sameInputs}" placeholder="${sameInputs === '' ? 'Varios' : ''}" min="2" max="10" />
+    `;
+    this.contentEl.appendChild(inputsGroup);
+
+    const typeSelect = typeGroup.querySelector('.gate-type') as HTMLSelectElement;
+    const negatedCheckbox = negatedGroup.querySelector('.gate-negated') as HTMLInputElement;
+    const inputsInput = inputsGroup.querySelector('.gate-inputs') as HTMLInputElement;
+
+    const update = () => {
+      const typeVal = typeSelect.value as LogicGateType;
+      
+      comps.forEach((c, idx) => {
+        const t = typeVal || c.gateType;
+        const negated = t === 'NOT' ? false : (negatedCheckbox.indeterminate && sameNegated === null ? c.negated : negatedCheckbox.checked);
+        const inputs = t === 'NOT' ? 1 : (isNaN(parseInt(inputsInput.value, 10)) ? c.inputs : Math.max(2, parseInt(inputsInput.value, 10)));
+        this.state.updateLogicGateProps(c.id, t, negated, inputs, idx < comps.length - 1);
+      });
+      this.state.commit();
+    };
+
+    if (sameNegated === null) {
+      negatedCheckbox.indeterminate = true;
+    }
+
+    typeSelect.addEventListener('change', () => {
+      // Refresh UI slightly to handle NOT gate specifics
+      const t = typeSelect.value;
+      if (t === 'NOT') {
+        negatedGroup.style.display = 'none';
+        inputsGroup.style.display = 'none';
+        negatedCheckbox.checked = false;
+      } else {
+        negatedGroup.style.display = 'flex';
+        inputsGroup.style.display = 'block';
+      }
+      update();
+    });
+    
+    negatedCheckbox.addEventListener('change', update);
+    inputsInput.addEventListener('change', update);
     
     this.addSeparator();
   }

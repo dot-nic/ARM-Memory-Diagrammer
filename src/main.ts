@@ -7,7 +7,7 @@ import { ComponentRenderer } from './canvas/ComponentRenderer';
 import { ConnectionRenderer } from './canvas/ConnectionRenderer';
 import { InteractionManager } from './canvas/InteractionManager';
 import { PropertiesPanel } from './ui/PropertiesPanel';
-import { MemoryComponent, DecoderComponent } from './models/types';
+import { MemoryComponent, DecoderComponent, LogicGateComponent } from './models/types';
 
 // Initialize Sidebar
 new Sidebar();
@@ -247,6 +247,26 @@ canvasEl.addEventListener('drop', (e: DragEvent) => {
           ]
         };
         state.addComponent(dec);
+        state.commit();
+      } else if (componentType === 'logicGate') {
+        const gate: LogicGateComponent = {
+          id: generateId(),
+          type: 'logicGate',
+          title: '', // usually empty, form indicates type
+          gateType: 'AND',
+          negated: false,
+          inputs: 2,
+          x: snappedX,
+          y: snappedY,
+          width: 60,
+          height: 60,
+          pins: [
+            { id: generateId(), name: 'In0', type: 'input', activeLow: false, x: 0, y: 20 },
+            { id: generateId(), name: 'In1', type: 'input', activeLow: false, x: 0, y: 40 },
+            { id: generateId(), name: 'Out', type: 'output', activeLow: false, x: 60, y: 30 }
+          ]
+        };
+        state.addComponent(gate);
         state.commit();
       } else if (componentType === 'source') {
         const srcComponent = {

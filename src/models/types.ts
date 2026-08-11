@@ -22,7 +22,7 @@ export interface Pin {
   y: number;
 }
 
-export type ComponentType = 'memory' | 'decoder' | 'source' | 'text' | 'shape';
+export type ComponentType = 'memory' | 'decoder' | 'source' | 'text' | 'shape' | 'logicGate';
 
 export interface BaseComponent extends Rect {
   id: string;
@@ -60,7 +60,16 @@ export interface ShapeComponent extends BaseComponent {
   fillColor?: string;
 }
 
-export type DiagramComponent = MemoryComponent | DecoderComponent | SourceComponent | TextComponent | ShapeComponent;
+export type LogicGateType = 'AND' | 'OR' | 'XOR' | 'NOT';
+
+export interface LogicGateComponent extends BaseComponent {
+  type: 'logicGate';
+  gateType: LogicGateType;
+  negated: boolean;
+  inputs: number;
+}
+
+export type DiagramComponent = MemoryComponent | DecoderComponent | SourceComponent | TextComponent | ShapeComponent | LogicGateComponent;
 
 export interface JointNode extends Point {
   id: string;

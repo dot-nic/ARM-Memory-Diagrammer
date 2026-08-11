@@ -1,4 +1,4 @@
-import { DiagramComponent, MemoryComponent, DecoderComponent, Connection, JointNode, Point } from './types';
+import { DiagramComponent, MemoryComponent, DecoderComponent, LogicGateComponent, LogicGateType, Connection, JointNode, Point } from './types';
 
 type Listener = () => void;
 
@@ -264,6 +264,51 @@ export class DiagramState {
     }
   }
 
+  public updateLogicGateProps(id: string, gateType: LogicGateType, negated: boolean, inputs: number, suppressNotify: boolean = false) {
+    const component = this.components.find(c => c.id === id && c.type === 'logicGate') as LogicGateComponent;
+    if (component) {
+      if (gateType === 'NOT') {
+        inputs = 1; // NOT gates always have exactly 1 input
+      }
+      
+      component.gateType = gateType;
+      component.negated = negated;
+      component.inputs = inputs;
+      
+      // Fixed width, dynamic height based on inputs
+      component.width = 60;
+      component.height = Math.max(60, inputs * 20 + 20);
+      
+      // Regenerate pins
+      component.pins = [];
+      
+      // Input Pins (left side)
+      const inputStartY = (component.height - (inputs * 20)) / 2 + 10;
+      for (let i = 0; i < inputs; i++) {
+        component.pins.push({
+          id: Math.random().toString(36).substring(2, 9),
+          name: inputs === 1 ? 'In' : `In${i}`,
+          type: 'input',
+          activeLow: false,
+          x: 0,
+          y: inputStartY + i * 20
+        });
+      }
+      
+      // Output Pin (right side)
+      component.pins.push({
+        id: Math.random().toString(36).substring(2, 9),
+        name: 'Out',
+        type: 'output',
+        activeLow: negated,
+        x: component.width,
+        y: component.height / 2
+      });
+
+      if (!suppressNotify) this.notify();
+    }
+  }
+
   public setComponentLock(id: string, locked: boolean, suppressNotify: boolean = false) {
     const comp = this.components.find(c => c.id === id);
     if (comp) {
@@ -488,30 +533,124 @@ export class DiagramState {
   }
 
   public cloneSelectedComponents() {
-    if (this.selectedComponentIds.length === 0) return;
+    if (this.selectedComponentIds.length === 0 && this.selectedConnectionIds.length === 0) return;
 
-    const newSelectedIds: string[] = [];
+    const newSelectedCompIds: string[] = [];
+    const newSelectedConnIds: string[] = [];
 
+    const compIdMap = new Map<string, string>();
+    const pinIdMap = new Map<string, string>();
+    const jointIdMap = new Map<string, string>();
+
+    // 1. Clone components
     this.selectedComponentIds.forEach(id => {
       const original = this.components.find(c => c.id === id);
       if (original) {
-        // Deep clone but change ids
         const clone = JSON.parse(JSON.stringify(original)) as DiagramComponent;
         clone.id = Math.random().toString(36).substring(2, 9);
         clone.x += 20;
         clone.y += 20;
 
-        // Regenerate pin IDs to prevent conflicts
-        clone.pins.forEach(pin => {
+        compIdMap.set(original.id, clone.id);
+
+        clone.pins.forEach((pin, index) => {
+          const oldPinId = original.pins[index].id;
           pin.id = Math.random().toString(36).substring(2, 9);
+          pinIdMap.set(oldPinId, pin.id);
         });
 
         this.components.push(clone);
-        newSelectedIds.push(clone.id);
+        newSelectedCompIds.push(clone.id);
       }
     });
 
-    this.selectedComponentIds = newSelectedIds;
+    // 2. Clone implicit joints from selected connections
+    this.selectedConnectionIds.forEach(connId => {
+      const conn = this.connections.find(c => c.id === connId);
+      if (conn) {
+        if (conn.source.type === 'joint' && !jointIdMap.has(conn.source.jointId)) {
+          jointIdMap.set(conn.source.jointId, Math.random().toString(36).substring(2, 9));
+        }
+        if (conn.target.type === 'joint' && !jointIdMap.has(conn.target.jointId)) {
+          jointIdMap.set(conn.target.jointId, Math.random().toString(36).substring(2, 9));
+        }
+      }
+    });
+
+    jointIdMap.forEach((newJointId, oldJointId) => {
+      const original = this.joints.find(j => j.id === oldJointId);
+      if (original) {
+        this.joints.push({
+          id: newJointId,
+          x: original.x + 20,
+          y: original.y + 20
+        });
+      }
+    });
+
+    // 3. Clone selected connections
+    this.selectedConnectionIds.forEach(connId => {
+      const original = this.connections.find(c => c.id === connId);
+      if (original) {
+        const clone = JSON.parse(JSON.stringify(original)) as Connection;
+        clone.id = Math.random().toString(36).substring(2, 9);
+
+        // Handle Source
+        if (clone.source.type === 'pin') {
+          if (compIdMap.has(clone.source.componentId)) {
+            clone.source.componentId = compIdMap.get(clone.source.componentId)!;
+            clone.source.pinId = pinIdMap.get(clone.source.pinId)!;
+          } else {
+            // Dangling start -> convert to joint
+            const uncopiedComp = this.components.find(c => c.id === (clone.source as any).componentId);
+            const pin = uncopiedComp?.pins.find(p => p.id === (clone.source as any).pinId);
+            const jId = Math.random().toString(36).substring(2, 9);
+            this.joints.push({
+              id: jId,
+              x: (uncopiedComp?.x || 0) + (pin?.x || 0) + 20,
+              y: (uncopiedComp?.y || 0) + (pin?.y || 0) + 20
+            });
+            clone.source = { type: 'joint', jointId: jId };
+          }
+        } else if (clone.source.type === 'joint') {
+          clone.source.jointId = jointIdMap.get(clone.source.jointId)!;
+        }
+
+        // Handle Target
+        if (clone.target.type === 'pin') {
+          if (compIdMap.has(clone.target.componentId)) {
+            clone.target.componentId = compIdMap.get(clone.target.componentId)!;
+            clone.target.pinId = pinIdMap.get(clone.target.pinId)!;
+          } else {
+            // Dangling end -> convert to joint
+            const uncopiedComp = this.components.find(c => c.id === (clone.target as any).componentId);
+            const pin = uncopiedComp?.pins.find(p => p.id === (clone.target as any).pinId);
+            const jId = Math.random().toString(36).substring(2, 9);
+            this.joints.push({
+              id: jId,
+              x: (uncopiedComp?.x || 0) + (pin?.x || 0) + 20,
+              y: (uncopiedComp?.y || 0) + (pin?.y || 0) + 20
+            });
+            clone.target = { type: 'joint', jointId: jId };
+          }
+        } else if (clone.target.type === 'joint') {
+          clone.target.jointId = jointIdMap.get(clone.target.jointId)!;
+        }
+
+        if (clone.waypoints) {
+          clone.waypoints = clone.waypoints.map(w => ({ x: w.x + 20, y: w.y + 20 }));
+        }
+        if (clone.widthPos) {
+          clone.widthPos = { x: clone.widthPos.x + 20, y: clone.widthPos.y + 20 };
+        }
+
+        this.connections.push(clone);
+        newSelectedConnIds.push(clone.id);
+      }
+    });
+
+    this.selectedComponentIds = newSelectedCompIds;
+    this.selectedConnectionIds = newSelectedConnIds;
     this.notify();
   }
 

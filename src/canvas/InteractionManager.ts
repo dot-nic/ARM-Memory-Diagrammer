@@ -159,7 +159,8 @@ export class InteractionManager {
     return null;
   }
 
-  private hitTestComponent(worldPos: Point): DiagramComponent | null {
+  private hitTestAllComponents(worldPos: Point): DiagramComponent[] {
+    const hits: DiagramComponent[] = [];
     const components = this.state.getComponents();
     for (let i = components.length - 1; i >= 0; i--) {
       const comp = components[i];
@@ -169,10 +170,15 @@ export class InteractionManager {
         worldPos.y >= comp.y &&
         worldPos.y <= comp.y + comp.height
       ) {
-        return comp;
+        hits.push(comp);
       }
     }
-    return null;
+    return hits;
+  }
+
+  private hitTestComponent(worldPos: Point): DiagramComponent | null {
+    const hits = this.hitTestAllComponents(worldPos);
+    return hits.length > 0 ? hits[0] : null;
   }
 
   private hitTestPadlock(worldPos: Point): DiagramComponent | null {
@@ -286,7 +292,8 @@ export class InteractionManager {
     return null;
   }
 
-  private hitTestConnectionSegment(worldPos: Point): { connection: Connection, segmentIndex: number } | null {
+  private hitTestAllConnectionSegments(worldPos: Point): { connection: Connection, segmentIndex: number }[] {
+    const hits: { connection: Connection, segmentIndex: number }[] = [];
     const connections = this.state.getConnections();
 
     for (const conn of connections) {
@@ -295,11 +302,17 @@ export class InteractionManager {
       for (let i = 0; i < path.length - 1; i++) {
         const dist = this.pointToSegmentDist(worldPos, path[i], path[i + 1]);
         if (dist < 8) {
-          return { connection: conn, segmentIndex: i };
+          hits.push({ connection: conn, segmentIndex: i });
+          break; // Push each connection at most once
         }
       }
     }
-    return null;
+    return hits;
+  }
+
+  private hitTestConnectionSegment(worldPos: Point): { connection: Connection, segmentIndex: number } | null {
+    const hits = this.hitTestAllConnectionSegments(worldPos);
+    return hits.length > 0 ? hits[0] : null;
   }
 
   private getComputedPath(conn: Connection): Point[] {
@@ -514,73 +527,7 @@ export class InteractionManager {
       return;
     }
 
-    // 2. Try to hit a component to drag it
-    const hitComponent = this.hitTestComponent(worldPos);
-    if (hitComponent) {
-      let selectedIds = this.state.getSelectedComponentIds();
-      // If we clicked on an unselected component, select only it and clear connections
-      if (!selectedIds.includes(hitComponent.id)) {
-        this.state.setSelectedConnectionIds([]);
-        this.state.setSelectedComponentIds([hitComponent.id]);
-        selectedIds = [hitComponent.id];
-      }
-
-      const anyLocked = selectedIds.some(id => {
-        const c = this.state.getComponents().find(comp => comp.id === id);
-        return c && c.locked;
-      });
-
-      if (anyLocked) {
-        e.preventDefault();
-        return;
-      }
-
-      this.isDraggingComponent = true;
-      this.draggingComponentId = hitComponent.id;
-
-      // Save starting positions for all selected components
-      this.dragStartPositions.clear();
-      this.dragStartWaypoints.clear();
-      this.dragStartJointPositions.clear();
-      this.state.getComponents().forEach(c => {
-        if (selectedIds.includes(c.id)) {
-          this.dragStartPositions.set(c.id, { x: c.x, y: c.y });
-        }
-      });
-      // Find all connections that attach to these components
-      const selectedConnectionIds = this.state.getSelectedConnectionIds();
-      this.state.getConnections().forEach(conn => {
-        const sourceHit = conn.source.type === 'pin' && selectedIds.includes(conn.source.componentId);
-        const targetHit = conn.target.type === 'pin' && selectedIds.includes(conn.target.componentId);
-
-        if (sourceHit || targetHit) {
-          const isBusOrSubBus = (conn.busWidth && conn.busWidth > 1) || conn.isSubBus;
-          if (!isBusOrSubBus || selectedConnectionIds.includes(conn.id)) {
-            if (conn.waypoints && conn.waypoints.length > 0) {
-              this.dragStartWaypoints.set(conn.id, conn.waypoints.map(w => ({ ...w })));
-            }
-            if (conn.isSubBus) {
-              const jointTarget = conn.source.type === 'joint' ? conn.source : (conn.target.type === 'joint' ? conn.target : null);
-              if (jointTarget) {
-                const joint = this.state.getJoints().find(j => j.id === jointTarget.jointId);
-                if (joint) {
-                  this.dragStartJointPositions.set(joint.id, { x: joint.x, y: joint.y });
-                }
-              }
-            }
-          }
-        }
-      });
-
-      this.dragOffset = {
-        x: worldPos.x - hitComponent.x,
-        y: worldPos.y - hitComponent.y
-      };
-      e.preventDefault();
-      return;
-    }
-
-    // 2.5 Try to hit the hover connection point to branch
+    // 2.5 Try to hit the hover connection point to branch (Moved up)
     if (this.hoveredConnection && this.hoveredConnectionPos) {
       if (Math.hypot(worldPos.x - this.hoveredConnectionPos.x, worldPos.y - this.hoveredConnectionPos.y) < 12) {
         this.isDrawingConnection = true;
@@ -598,7 +545,7 @@ export class InteractionManager {
       }
     }
 
-    // 2.7 Try to hit an annotation on a connection
+    // 2.7 Try to hit an annotation on a connection (Moved up)
     const hitAnnotation = this.hitTestConnectionAnnotations(worldPos);
     if (hitAnnotation) {
       this.isDraggingAnnotation = true;
@@ -619,23 +566,123 @@ export class InteractionManager {
       return;
     }
 
-    // 3. Try to hit a connection to select it or drag a segment
-    const hitSegment = this.hitTestConnectionSegment(worldPos);
-    if (hitSegment) {
-      this.state.setSelectedComponentIds([]);
-      this.state.setSelectedConnectionIds([hitSegment.connection.id]);
+    // 3. Try to hit components or connections to select/drag and allow cycling
+    const allHitComponents = this.hitTestAllComponents(worldPos);
+    const allHitSegments = this.hitTestAllConnectionSegments(worldPos);
 
-      this.isDraggingConnectionSegment = true;
-      this.draggedConnectionId = hitSegment.connection.id;
-      this.draggedSegmentIndex = hitSegment.segmentIndex;
-      this.dragSegmentStartPos = worldPos;
+    const combinedHits: { id: string, type: 'component' | 'connection', data: any }[] = [
+      ...allHitComponents.map(c => ({ id: c.id, type: 'component' as const, data: c })),
+      ...allHitSegments.map(s => ({ id: s.connection.id, type: 'connection' as const, data: s }))
+    ];
 
-      if (!hitSegment.connection.waypoints || hitSegment.connection.waypoints.length < 4) {
-        hitSegment.connection.waypoints = this.getComputedPath(hitSegment.connection);
+    if (combinedHits.length > 0) {
+      let selectedHit = combinedHits[0];
+      
+      let currentlySelectedIndex = -1;
+      if (combinedHits.length > 1) {
+        const selectedCompIds = this.state.getSelectedComponentIds();
+        const selectedConnIds = this.state.getSelectedConnectionIds();
+        
+        currentlySelectedIndex = combinedHits.findIndex(hit => {
+          if (hit.type === 'component') return selectedCompIds.includes(hit.id) && selectedCompIds.length === 1 && selectedConnIds.length === 0;
+          if (hit.type === 'connection') return selectedConnIds.includes(hit.id) && selectedConnIds.length === 1 && selectedCompIds.length === 0;
+          return false;
+        });
+
+        if (currentlySelectedIndex !== -1) {
+          selectedHit = combinedHits[(currentlySelectedIndex + 1) % combinedHits.length];
+        }
       }
 
-      e.preventDefault();
-      return;
+      if (selectedHit.type === 'component') {
+        const hitComponent = selectedHit.data as DiagramComponent;
+        
+        let selectedIds = this.state.getSelectedComponentIds();
+        const didCycle = combinedHits.length > 1 && currentlySelectedIndex !== -1;
+        // If we clicked on an unselected component, or if we cycled, select only it
+        if (!selectedIds.includes(hitComponent.id) || didCycle) {
+          this.state.setSelectedConnectionIds([]);
+          this.state.setSelectedComponentIds([hitComponent.id]);
+          selectedIds = [hitComponent.id];
+        }
+
+        const anyLocked = selectedIds.some(id => {
+          const c = this.state.getComponents().find(comp => comp.id === id);
+          return c && c.locked;
+        });
+
+        if (anyLocked) {
+          e.preventDefault();
+          return;
+        }
+
+        this.isDraggingComponent = true;
+        this.draggingComponentId = hitComponent.id;
+
+        // Save starting positions for all selected components
+        this.dragStartPositions.clear();
+        this.dragStartWaypoints.clear();
+        this.dragStartJointPositions.clear();
+        this.state.getComponents().forEach(c => {
+          if (selectedIds.includes(c.id)) {
+            this.dragStartPositions.set(c.id, { x: c.x, y: c.y });
+          }
+        });
+        
+        // Find all connections that attach to these components
+        const selectedConnectionIds = this.state.getSelectedConnectionIds();
+        this.state.getConnections().forEach(conn => {
+          const sourceHit = conn.source.type === 'pin' && selectedIds.includes(conn.source.componentId);
+          const targetHit = conn.target.type === 'pin' && selectedIds.includes(conn.target.componentId);
+
+          if (sourceHit || targetHit) {
+            const isBusOrSubBus = (conn.busWidth && conn.busWidth > 1) || conn.isSubBus;
+            if (!isBusOrSubBus || selectedConnectionIds.includes(conn.id)) {
+              if (conn.waypoints && conn.waypoints.length > 0) {
+                this.dragStartWaypoints.set(conn.id, conn.waypoints.map(w => ({ ...w })));
+              }
+              if (conn.isSubBus) {
+                const jointTarget = conn.source.type === 'joint' ? conn.source : (conn.target.type === 'joint' ? conn.target : null);
+                if (jointTarget) {
+                  const joint = this.state.getJoints().find(j => j.id === jointTarget.jointId);
+                  if (joint) {
+                    this.dragStartJointPositions.set(joint.id, { x: joint.x, y: joint.y });
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        this.dragOffset = {
+          x: worldPos.x - hitComponent.x,
+          y: worldPos.y - hitComponent.y
+        };
+        e.preventDefault();
+        return;
+      } else {
+        const hitSegment = selectedHit.data as { connection: Connection, segmentIndex: number };
+        
+        let selectedConnIds = this.state.getSelectedConnectionIds();
+        const didCycle = combinedHits.length > 1 && currentlySelectedIndex !== -1;
+        
+        if (!selectedConnIds.includes(hitSegment.connection.id) || didCycle) {
+          this.state.setSelectedComponentIds([]);
+          this.state.setSelectedConnectionIds([hitSegment.connection.id]);
+        }
+
+        this.isDraggingConnectionSegment = true;
+        this.draggedConnectionId = hitSegment.connection.id;
+        this.draggedSegmentIndex = hitSegment.segmentIndex;
+        this.dragSegmentStartPos = worldPos;
+
+        if (!hitSegment.connection.waypoints || hitSegment.connection.waypoints.length < 4) {
+          hitSegment.connection.waypoints = this.getComputedPath(hitSegment.connection);
+        }
+
+        e.preventDefault();
+        return;
+      }
     }
 
     // Deselect
